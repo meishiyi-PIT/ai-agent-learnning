@@ -1,0 +1,4 @@
+deepagents>=0.5.4
+langchain-openai>=1.0
+langsmith>=0.4
+python-dotenv>=1.0

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>课程目录 · 智服中台</title>
+  <meta name="description" content="智服中台项目课程：项目需求、多Agent协作、性能优化、模型推理、部署交付与简历面试。包含六课文章、十个代码阶段、真实源码、实验和作业。">
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./catalog.css">
+</head>
+<body id="top">
+  <a class="skip-link" href="#course-content">跳转课程内容</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="course-brand" href="./course.html"><img class="brand-logo" src="./brand-logo.png" alt="术核" height="34"><span>智服中台</span></a>
+      <nav class="header-nav" aria-label="课程导航">
+        <a href="#lessons" aria-current="page">课程目录</a>
+        <a class="header-source" href="./source.html">源码阅读器 <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+  <div class="catalog-hero">
+    <div class="hero-inner">
+      <p class="eyebrow">课程目录 <span>六课连续阅读</span></p>
+      <h1>智服中台</h1>
+      <p class="hero-description">从接手项目、完成需求，到并发协作、性能验证与运行维护。沿同一个业务项目，阅读关键源码，完成实验与需求交付，准备简历内容与面试表达。</p>
+      <div class="hero-meta"><span>6 篇课程文章</span><span>10 个代码阶段</span><span>源码 · 图解 · 实验 · 作业</span></div>
+      <p class="hero-description">解压后打开 index.html，即可离线阅读课程、图解和全部阶段源码。</p>
+      <nav class="hero-nav" aria-label="本页内容"><a href="#lessons">课程内容 <span aria-hidden="true">↓</span></a><a href="#stages">代码阶段</a><a href="#resources">配套资料</a></nav>
+    </div>
+  </div>
+  <main id="course-content" tabindex="-1">
+    <div class="catalog-layout">
+      <section id="lessons" aria-labelledby="lessons-title">
+        <div class="section-heading"><div><p class="section-label">课程内容</p><h2 id="lessons-title">从业务需求到项目面试</h2></div><span class="section-count">01—06</span></div>
+        <div class="lesson-list">
+          <article class="lesson" aria-labelledby="lesson-01-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">01</span><div><p class="lesson-stage">第一课 <span>代码阶段 00 → 01</span></p><h3 id="lesson-01-title">项目全景与第一次需求交付</h3></div></div>
+            <div class="lesson-content"><p>认识完整业务与系统架构，沿页面请求理解Agent工具调用，完成审批超时提醒的需求、事务、并发与发布检查。</p><ul class="lesson-topics" aria-label="第一课主题"><li>业务与调用流程</li><li>权限与幂等</li><li>审批提醒</li></ul><nav class="lesson-actions" aria-label="第一课入口"><a class="read-link" href="./articles/lesson-01.html">阅读第一课</a><a class="assignment-link" href="./articles/lesson-01.html#section-12">课后作业 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+          <article class="lesson" aria-labelledby="lesson-02-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">02</span><div><p class="lesson-stage">第二课 <span>代码阶段 02 → 03 → 04</span></p><h3 id="lesson-02-title">多Agent并发、状态同步与任务恢复</h3></div></div>
+            <div class="lesson-content"><p>沿订单与资料的并行查询，理解任务与线程、结果合并、事务版本和执行租约，追踪进程恢复后结果的使用条件。</p><ul class="lesson-topics" aria-label="第二课主题"><li>并行角色</li><li>状态与版本</li><li>持久任务恢复</li></ul><nav class="lesson-actions" aria-label="第二课入口"><a class="read-link" href="./articles/lesson-02.html">阅读第二课</a><a class="assignment-link" href="./articles/lesson-02.html#section-12">课后作业 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+          <article class="lesson" aria-labelledby="lesson-03-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">03</span><div><p class="lesson-stage">第三课 <span>代码阶段 05 · 09 验证</span></p><h3 id="lesson-03-title">请求、数据库与检索性能优化</h3></div></div>
+            <div class="lesson-content"><p>沿请求进入、任务排队、订单查询与资料检索定位等待来源，结合查询计划和真实组件负载，判断优化的收益与范围。</p><ul class="lesson-topics" aria-label="第三课主题"><li>排队与连接</li><li>SQL与索引</li><li>BGE与Milvus</li></ul><nav class="lesson-actions" aria-label="第三课入口"><a class="read-link" href="./articles/lesson-03.html">阅读第三课</a><a class="assignment-link" href="./articles/lesson-03.html#section-12">课后作业 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+          <article class="lesson" aria-labelledby="lesson-04-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">04</span><div><p class="lesson-stage">第四课 <span>代码阶段 06 → 07</span></p><h3 id="lesson-04-title">上下文、模型推理与流式响应</h3></div></div>
+            <div class="lesson-content"><p>从输入消息与token预算进入模型请求，分析推理资源、正文增量、断线续传与取消，使用已有样本计算模型消耗。</p><ul class="lesson-topics" aria-label="第四课主题"><li>上下文与HTTP</li><li>vLLM与KV cache</li><li>SSE与用量</li></ul><nav class="lesson-actions" aria-label="第四课入口"><a class="read-link" href="./articles/lesson-04.html">阅读第四课</a><a class="assignment-link" href="./articles/lesson-04.html#section-12">课后作业 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+          <article class="lesson" aria-labelledby="lesson-05-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">05</span><div><p class="lesson-stage">第五课 <span>代码阶段 08 → 09</span></p><h3 id="lesson-05-title">部署、运维与项目交付</h3></div></div>
+            <div class="lesson-content"><p>核对服务配置、迁移、运行观察与费用，完成独立环境的停止恢复和备份演练，结合容量记录准备交付与项目说明。</p><ul class="lesson-topics" aria-label="第五课主题"><li>发布与监控</li><li>备份与恢复</li><li>容量与交付</li></ul><nav class="lesson-actions" aria-label="第五课入口"><a class="read-link" href="./articles/lesson-05.html">阅读第五课</a><a class="assignment-link" href="./articles/lesson-05.html#section-12">课后作业 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+          <article class="lesson" aria-labelledby="lesson-06-title">
+            <div class="lesson-heading"><span class="lesson-number" aria-hidden="true">06</span><div><p class="lesson-stage">第六课 <span>Agent 开发 · 部署 · 监控 · 运维</span></p><h3 id="lesson-06-title">项目简历与面试表达</h3></div></div>
+            <div class="lesson-content"><p>从业务架构、Agent 编排到部署监控与故障恢复，结合真实测量编写中高级 Agent 开发工程师的专业技能、项目职责和面试回答。</p><ul class="lesson-topics" aria-label="第六课主题"><li>业务与技术价值</li><li>部署监控与运维</li><li>简历与面试回答</li></ul><nav class="lesson-actions" aria-label="第六课入口"><a class="read-link" href="./articles/lesson-06.html">阅读第六课</a><a class="assignment-link" href="./articles/lesson-06.html#section-12">项目材料与面试自查 <span aria-hidden="true">↗</span></a></nav></div>
+          </article>
+        </div>
+      </section>
+      <aside id="stages" class="stage-panel" aria-labelledby="stages-title">
+        <p class="section-label">固定源码</p><h2 id="stages-title">十个代码阶段</h2><p class="stage-intro">从已有业务继续开发。选择阶段，查看对应提交中的文件与函数。</p>
+        <ol class="stage-list">
+          <li><a href="./source.html?stage=00-handover"><span class="stage-number">00</span><span class="stage-detail"><strong>接手已有项目</strong><span>第一课 · 业务与执行基础</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=01-business-change"><span class="stage-number">01</span><span class="stage-detail"><strong>审批超时提醒</strong><span>第一课 · 完成业务需求</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=02-parallel-agents"><span class="stage-number">02</span><span class="stage-detail"><strong>多Agent协作</strong><span>第二课 · 并行查询与协调</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=03-state-consistency"><span class="stage-number">03</span><span class="stage-detail"><strong>并发状态同步</strong><span>第二课 · 结果合并与版本</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=04-durable-execution"><span class="stage-number">04</span><span class="stage-detail"><strong>持久任务执行</strong><span>第二课 · 分支记录与恢复</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=05-data-retrieval-performance"><span class="stage-number">05</span><span class="stage-detail"><strong>查询与检索性能</strong><span>第三课 · 索引及负载实验</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=06-context-model-performance"><span class="stage-number">06</span><span class="stage-detail"><strong>上下文与模型连接</strong><span>第四课 · 输入选择与预算</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=07-streaming-response"><span class="stage-number">07</span><span class="stage-detail"><strong>模型正文流式响应</strong><span>第四课 · 事件、续传与计量</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=08-deployment-operations"><span class="stage-number">08</span><span class="stage-detail"><strong>部署与运维演练</strong><span>第五课 · 发布检查与恢复</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+          <li><a href="./source.html?stage=09-course-delivery"><span class="stage-number">09</span><span class="stage-detail"><strong>项目验收与交付</strong><span>第五课 · 计量优化与验证</span></span><span class="stage-arrow" aria-hidden="true">↗</span></a></li>
+        </ol>
+        <p class="stage-note">代码阶段与运行环境分别管理。文章保留固定源码链接，实验记录注明代码版本与执行范围。</p>
+      </aside>
+    </div>
+    <section id="resources" class="resources" aria-labelledby="resources-title">
+      <div class="section-heading"><div><p class="section-label">配套资料</p><h2 id="resources-title">环境、部署与样本记录</h2></div></div>
+      <div class="resource-grid">
+        <a class="resource-link" href="./materials/branch-guide.html"><span class="resource-label">环境操作</span><h3>分支与环境操作 <span aria-hidden="true">↗</span></h3><p>核对课程分支、独立环境、启动顺序与相邻阶段的代码变化。</p></a>
+        <a class="resource-link" href="./materials/gpu-deployment-lab.html"><span class="resource-label">推理部署</span><h3>项目推理服务部署 <span aria-hidden="true">↗</span></h3><p>配置GPU副本、模型网关和Agent接入，核对业务发布、容量与监控。</p></a>
+        <a class="resource-link" href="./materials/model-sample-analysis.html"><span class="resource-label">模型用量</span><h3>模型样本与费用 <span aria-hidden="true">↗</span></h3><p>检查20次历史模型尝试，分别计算输入、缓存命中、输出与费用。</p></a>
+      </div>
+      <p class="scope-note">部署资料关联项目源码与运行参数；组件测试、模型样本和容量计算分别记录验证范围。</p>
+      <p class="scope-note" id="downloads">完整源码：<a href="./downloads/zhifu-course-source.zip" download>下载最终阶段源码</a> · <a href="./downloads/zhifu-course-history.zip" download>下载十个阶段 Git 历史</a> · <a href="./打开课件说明.txt">阅读说明</a></p>
+    </section>
+  </main>
+  <footer class="site-footer"><span>智服中台</span><span>课程文章 · 固定源码 · 实验记录</span><a href="#top">返回顶部 ↑</a></footer>
+</body>
+</html>

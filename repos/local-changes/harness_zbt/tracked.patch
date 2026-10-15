@@ -1,0 +1,278 @@
+diff --git a/backend/src/zbt/commands/seed_knowledge.py b/backend/src/zbt/commands/seed_knowledge.py
+index f1830cc..636ca04 100644
+--- a/backend/src/zbt/commands/seed_knowledge.py
++++ b/backend/src/zbt/commands/seed_knowledge.py
+@@ -54,6 +54,12 @@ SEED_DOCUMENTS: tuple[SeedDocumentConfig, ...] = (
+         "document_type": "FAQ",
+         "product_code": "ACC-FAMILY",
+     },
++    {
++        "file_name": "安心医疗险续保与保障调整规则.md",
++        "title": "安心医疗险续保与保障调整规则",
++        "document_type": "PRODUCT_GUIDE",
++        "product_code": "MED-BASIC",
++    },
+ )
+ 
+ 
+diff --git a/backend/src/zbt/domains/agent/tools.py b/backend/src/zbt/domains/agent/tools.py
+index daabafa..61514f8 100644
+--- a/backend/src/zbt/domains/agent/tools.py
++++ b/backend/src/zbt/domains/agent/tools.py
+@@ -30,7 +30,8 @@ from zbt.harness.schemas import (
+     QuoteView,
+ )
+ from zbt.harness.tooling import ToolDefinition, ToolExecutionContext, ToolRegistry
+-
++from zbt.domains.renewal import models as renewal_model
++from zbt.harness.schemas import RenewalAdviceBlock
+ 
+ class AttributionMetricsProvider(Protocol):
+     def performance(self, admin_user_id: str | None = None) -> dict[str, Any]: ...
+@@ -171,6 +172,21 @@ class SearchPartnerInstitutionsArgs(ToolArguments):
+     district: str | None = Field(default=None, min_length=2, max_length=30)
+     service_type: str | None = Field(default=None, min_length=2, max_length=40)
+ 
++class GetPolicyContextArgs(ToolArguments):
++    policy_id:str = Field(min_length=16,max_length=64)    
++
++class SubmitRenewalAdviceArgs(ToolArguments):
++    # 需要补充：policy_id、decision、selected_option_code、summary、
++    # reasons、missing_information、cited_chunk_ids 等字段及长度限制
++    policy_id:str
++    desicsion : renewal_model.RenewalDecision
++    selected_option_code:str
++    selected_option_name:str
++    premium_cents:int
++    summary:str
++    resons:str
++    missing_information:list[str]
++    cited_chunk_ids:list[int]
+ 
+ class UnavailablePartnerResources:
+     def search(
+@@ -851,6 +867,105 @@ def build_agent_tool_registry(
+             data=dict(result),
+         )
+ 
++    def get_policy_context(
++            context:ToolExecutionContext,
++            arguments:BaseModel,
++    ) -> HarnessToolResult:
++    # **需要补充的逻辑**：
++    # 1. 通过 context.h5_user 拿当前登录用户，没有用户时抛 401
++    # 2. 用 enrollment.list_policies(user) 查当前用户的保单列表，再按 policy_id
++    #    匹配（现有服务没有按保单 ID 单查的公开方法，列表过滤即可）
++    # 3. 只允许 ACTIVE 状态的保单参与续保规划
++    # 4. 保单不存在、不属于当前用户、已失效时，统一抛 RENEWAL_POLICY_NOT_AVAILABLE，
++    #    不要分别提示，避免泄露其他用户保单的存在性
++    # 5. 返回保单号、产品名、计划名、coverage_end 等必要字段（与现有
++    #    policy_data 的字段命名一致），不要返回身份证号等敏感字段
++        args = _arguments(arguments,GetPolicyContext)
++        user = context.h5_user
++        if user is None:
++            raise AppError("AGENT_CUSTOMER_REQUIRED","长期记忆需要H5用户身份",401)
++        polices = enrollment.list_policies(user).items
++        policy_id = args.policy_id
++        origin_policy = None
++        for policy in polices:
++            if policy_id == policy.policy_id:
++                if policy.status == 'ACTIVE':
++                    origin_policy = policy
++
++        if origin_policy == None: 
++            raise AppError("RENEWAL_POLICY_NOT_AVAILABLE",400)
++
++        return HarnessToolResult(
++            summary="检索到的用户当前的保单",
++            data=policy
++        )
++
++    def get_renewal_options(
++            context:ToolExecutionContext,
++            arguments:BaseModel,
++    ) -> HarnessToolResult:
++        # **需要补充的逻辑**：
++        # 1. 从步骤4 的领域模型读取方案，不要在这里重新写死
++        # 2. 返回结构里带options列表，方便agent比较
++        return HarnessToolResult(summary="提供续保候选方案",data=renewal_model.RENEWAL_OPTIONS)
++
++    def submit_renewal_advice(
++            context:ToolExecutionContext,
++            arguments:BaseModel,
++    ) -> HarnessToolResult:
++        # 需要补充的校验逻辑：
++    # 1. 本次运行必须已经调用过 get_policy_context（检查 context.executions） 前置工具是否已经调用
++    # 2. 本次运行必须已经调用过 get_renewal_options
++    # 3. selected_option_code 必须是候选方案之一，不能接受 Agent 编造的新方案
++    # 4. cited_chunk_ids 必须来自本次 search_insurance_knowledge 的返回结果，
++    #    不能引用没检索过的切片
++    # 5. 涉及等待期、保障责任、报销范围等事实性结论时，必须有直接证据；
++    #    没有证据的结论要拒绝
++    # 6. “无法确定”可以没有引用，但 missing_information 不能为空
++    # 7. 校验通过后，把参数构造成步骤 3 的 RenewalAdviceBlock 返回
++        tool_num_get_policy_context = 0
++        option_code_num = 0
++        cited_chunk_ids = arguments.cited_chunk_ids
++
++        selected_option_code = arguments.selected_option_code
++        for execution in context.executions:
++            if execution.name == 'get_policy_context':
++                tool_num_get_policy_context += 1
++            if execution.name == 'get_renewal_options':
++                for option in execution.result.data.items:
++                    if option.option_code == selected_option_code:
++                        option_code_num += 1
++            if execution.name == 'search_insurance_knowledge':
++                if not execution.result.data.items.contains(cited_chunk_ids):
++                    raise AppError("ERROR_CHUNNK_ID","出现不属于本次检索到的切片内容",500)
++
++            if tool_num_get_policy_context == 0:
++                raise AppError("ERROR_STEP","未调用get_policy_context的工具方法",501) 
++            if  option_code_num == 0:
++                raise AppError("ERROR_STEP","selected_option_code 必须是候选方案之一",500) 
++
++
++        decision = arguments.decision
++        missing_information = arguments.missing_information
++        if decision.contains('无法确定'):
++            if missing_information is None:
++                raise AppError("ERROR_PARAMETERS","missing_information 不能为空",500) 
++
++        return HarnessToolResult(
++            summary="校验方案",
++            data=RenewalAdviceBlock(
++                decision=decision,
++                selected_option_code=selected_option_code,
++                selected_option_name=arguments.selected_option_code,
++                premium_cents=arguments.premium_cents,
++                summary=arguments.sumarry,
++                reasons=arguments.reasons,
++                missing_information=missing_information,
++                cited_chunk_ids=cited_chunk_ids
++            )
++        ) 
++
++
+     definitions = (
+         ToolDefinition(
+             name="list_available_products",
+@@ -1017,6 +1132,27 @@ def build_agent_tool_registry(
+             policy=ToolPolicy(personas=("customer",), effect="draft"),
+             handler=forget_customer_memory,
+         ),
++        ToolDefinition(
++            name="get_policy_context",
++            description="查询当前登录用户本人保障中的保单信息，供续保规划使用",
++            arguments=GetPolicyContextArgs,
++            policy=ToolPolicy(personas=("customer"),effect="draft"),
++            handler=get_policy_context,
++        ),
++        ToolDefinition(
++            name="get_renewal_options",
++            description="返回续保两个候选方案，供续保规划比较使用",
++            arguments=EmptyArgs,
++            policy=ToolPolicy(personas=("customer",), effect="read"),
++            handler=get_renewal_options,
++        ),
++        ToolDefinition(
++            name="submit_renewal_advice",
++            description="校验并提交续保规划的结构化建议，Agent 完成判断后必须调用",
++            arguments=SubmitRenewalAdviceArgs,
++            policy=ToolPolicy(personas=("customer",), effect="draft"),
++            handler=submit_renewal_advice,
++        ),
+     )
+     for definition in definitions:
+         registry.register(definition)
+diff --git a/backend/src/zbt/domains/surrender/workflow.py b/backend/src/zbt/domains/surrender/workflow.py
+index 6ed0f53..71816f1 100644
+--- a/backend/src/zbt/domains/surrender/workflow.py
++++ b/backend/src/zbt/domains/surrender/workflow.py
+@@ -76,7 +76,8 @@ class SurrenderWorkflow:
+             and settings.langsmith_api_key
+             else None
+         )
+-        # 人工审批单独做成子图，主图只关心它最终返回通过还是拒绝。
++        # 人工审批单独做
++        # 成子图，主图只关心它最终返回通过还是拒绝。
+         review_builder: Any = StateGraph(SurrenderWorkflowState)
+         review_builder.add_node("human_approval", self._operations_approval)
+         review_builder.add_edge(START, "human_approval")
+diff --git a/backend/src/zbt/harness/registries.py b/backend/src/zbt/harness/registries.py
+index 6922f2a..dce8360 100644
+--- a/backend/src/zbt/harness/registries.py
++++ b/backend/src/zbt/harness/registries.py
+@@ -122,6 +122,7 @@ class PersonaRegistry:
+                     "enrollment-guidance",
+                     "customer-memory",
+                     "policy-lifecycle",
++                    "renewal-planning",
+                     "partner-medical-resources",
+                 ),
+                 tool_names=(
+@@ -131,6 +132,9 @@ class PersonaRegistry:
+                     "list_my_orders",
+                     "list_my_policies",
+                     "list_my_surrenders",
++                    "get_policy_context",
++                    "get_renewal_options",
++                    "submit_renewal_advice",
+                     "search_insurance_knowledge",
+                     "remember_customer_preference",
+                     "recall_customer_memories",
+diff --git a/backend/src/zbt/harness/schemas.py b/backend/src/zbt/harness/schemas.py
+index c62b1d0..ec3523a 100644
+--- a/backend/src/zbt/harness/schemas.py
++++ b/backend/src/zbt/harness/schemas.py
+@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
+ from typing import Annotated, Any, Literal
+ 
+ from pydantic import BaseModel, ConfigDict, Field
+-
++from renewal_advice import RenewalAdviceRequest
+ 
+ class StrictModel(BaseModel):
+     """拒绝未声明字段，防止模型生成内容悄悄穿透协议。"""
+@@ -120,6 +120,31 @@ class KnowledgeSourcesBlock(StrictModel):
+     title: str = "回答依据"
+     items: list[KnowledgeSourceView] = Field(max_length=5)
+ 
++class RenewalAdviceBlock(StrictModel):
++    # 需要补充的字段：
++    # - type 固定为 "renewal_advice"，version 固定为 "1.0"
++    # - decision：建议的决策类型，至少覆盖“维持原方案 / 升级 / 信息不足 / 无法确定”四类
++    # - selected_option：选中的方案（代号、名称、价格），信息不足或无法确定时可以为空
++    # - summary：给用户的一句话结论
++    # - reasons：理由列表，最多 3 条
++    # - missing_information：还缺哪些信息，最多 3 条
++    # - cited_chunk_ids：本次引用的知识切片 ID，最多 5 个
++    type:Literal['renewal_advice']
++    version:Literal["1.0"]
++    decision: Literal[
++        "RENEW_ORIGINAL",
++        "UPGRADE",
++        "NEED_MORE_INFORMATION",
++        "CANNOT_DETERMINE",
++    ]
++    selected_option_code: Literal["RENEW_ORIGINAL", "UPGRADE"] | None = None
++    selected_option_name: str | None = None
++    premium_cents: int | None = Field(default=None, ge=0)
++    summary:str
++    reasons:list[str]=Field(max_length=3)
++    missing_information:list[str]=Field(max_length=3)
++    cited_chunk_ids:list[str]=Field(max_length=5)
++
+ 
+ UiBlock = Annotated[
+     ProductRecommendationsBlock
+@@ -127,7 +152,8 @@ UiBlock = Annotated[
+     | BusinessListBlock
+     | MetricsBlock
+     | ChartBlock
+-    | KnowledgeSourcesBlock,
++    | KnowledgeSourcesBlock
++    | RenewalAdviceBlock,
+     Field(discriminator="type"),
+ ]
+ 

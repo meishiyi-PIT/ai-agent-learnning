@@ -1,0 +1,30 @@
+# ---- 隐私：简历相关不上传（仓库是 public；简历目录已从同步脚本里去掉，这里再兜底挡一次） ----
+简历/
+学习笔记/简历梳理.md
+
+# ---- 密钥 / 环境，永远不传 ----
+.env
+.env.*
+!.env.example
+!.env.*.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/
+.claude/settings.local.json
+!workspace-config/.claude/settings.local.json
+
+# ---- 大文件 ----
+models/
+*.pth
+*.safetensors
+*.bin
+*.ckpt
+*.mp4
+*.sz
+*.pdf
+
+# ---- 系统 ----
+Thumbs.db
+.DS_Store

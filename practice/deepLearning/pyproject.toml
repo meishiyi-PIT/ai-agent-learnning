@@ -1,0 +1,40 @@
+[project]
+name = "deeplearning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+# 模块五课件统一用 torch 2.3.0 全家桶（torchtext 0.18.0 是最后一版，只兼容 torch 2.3.0）；
+# torch 2.3.0 是对着 NumPy 1.x 编译的，所以 numpy 必须 <2，否则 import 时刷警告、numpy<->tensor 互转可能失败。
+dependencies = [
+    "matplotlib>=3.11.1",
+    "net>=2.4",
+    "numpy<2",
+    "pandas>=2.2",
+    "tensorboard>=2.17",
+    "torch==2.3.0",
+    "torchvision==0.18.0",
+    "torchaudio==2.3.0",
+    "torchtext==0.18.0",
+    "tqdm>=4.70.0",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+torchtext = { index = "pytorch-cpu" }
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+]

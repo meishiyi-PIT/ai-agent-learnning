@@ -1,0 +1,14 @@
+{
+  "vendors": {
+    "ACME": {
+      "vendor": "ACME",
+      "found": true,
+      "status": "candidate",
+      "late_delivery_rate": 0.08,
+      "disputes_24m": 2,
+      "payment_hold": false,
+      "beneficial_owner_verified": true
+    }
+  }
+}
+

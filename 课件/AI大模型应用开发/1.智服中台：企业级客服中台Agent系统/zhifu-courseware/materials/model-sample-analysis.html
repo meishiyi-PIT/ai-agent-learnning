@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="读取六份历史模型记录，核对调用次数、缓存输入与输出 token，复算费用及业务量。">
+  <title>20 次真实模型调用的 token 与费用分析 · 智服中台</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../article-assets/article.css">
+  <link rel="stylesheet" href="../material.css">
+  <script defer src="../material-assets/diagrams.js"></script>
+  <script defer src="../material.js"></script>
+</head>
+<body class="material-page">
+  <a class="skip-link" href="#article-content">跳转正文</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="course-brand" href="../course.html"><img class="brand-logo" src="../brand-logo.png" alt="术核" height="34"><span>智服中台</span></a>
+      <nav class="header-nav" aria-label="课程导航"><a href="../course.html">课程目录</a><a href="../course.html#resources">配套资料</a><a class="header-source" href="../source.html?stage=09-course-delivery">查看源码 <span aria-hidden="true">↗</span></a></nav>
+    </div>
+    <div class="reading-progress" aria-hidden="true"><span></span></div>
+  </header>
+  <div class="article-hero" id="top">
+    <div class="hero-inner">
+      <p class="eyebrow"><a href="../course.html#resources">课程配套资料</a><span>模型用量</span></p>
+      <h1>20 次真实模型调用的 token 与费用分析</h1>
+      <p class="hero-description">读取六份历史模型记录，核对调用次数、缓存输入与输出 token，复算费用及业务量。</p>
+      <div class="lesson-meta"><span>20 次历史模型尝试</span><span>缓存与 token</span><span>费用估算</span></div>
+    </div>
+  </div>
+  <div class="reading-layout">
+    <aside class="sidebar">
+      <nav class="desktop-toc" aria-label="本文目录"><p class="toc-title">本文目录</p><ol><li><a href="#section-1"><span class="toc-number">01</span><span>样本验证范围</span></a></li><li><a href="#section-2"><span class="toc-number">02</span><span>2026-09-25 查询的官方价格</span></a></li><li><a href="#section-3"><span class="toc-number">03</span><span>可以复算的 PowerShell 命令</span></a></li><li><a href="#section-4"><span class="toc-number">04</span><span>业务量估算练习</span></a></li><li><a href="#section-5"><span class="toc-number">05</span><span>样本结论与测量范围</span></a></li><li><a href="#section-6"><span class="toc-number">06</span><span>文件指纹</span></a></li></ol></nav>
+      <div class="sidebar-resource"><span>配套资料</span><nav class="material-nav" aria-label="资料切换"><a href="./branch-guide.html">环境操作</a><a href="./gpu-deployment-lab.html">推理部署</a><a href="./model-sample-analysis.html" aria-current="page">模型用量</a></nav><a href="./model-sample-analysis.md" download="model-sample-analysis.md" data-download-content="IyAyMCDmrKHnnJ/lrp7mqKHlnovosIPnlKjnmoQgdG9rZW4g5LiO6LS555So5YiG5p6QCgrmnKzmnZDmlpnkvb/nlKjmlZnlrabku6PnoIHku5PlupMgYGRvY3MvY291cnNlL3ZlcmlmaWNhdGlvbi9gIOS4i+eahOS4ieS4quWNj+S9nOiusOW9leOAgeS4gOS4quato+aWh+a1geW8j+iusOW9leWSjOS4pOS4quW3peWFt+a1geW8j+iusOW9leOAguWFreS4quiusOW9leWdh+S9v+eUqCBgZGVlcHNlZWstZmxhc2hg44CC5q+P5Liq5Y2P5L2c5qC35pys5a6e6ZmF5byA5aeLIDUg5qyh5qih5Z6L5bCd6K+V77yM5LiK6ZmQ5Li6IDYg5qyh77yb5q2j5paH5rWB5byP5qC35pys5a6e6ZmF5byA5aeLIDEg5qyh77yM5LiK6ZmQ5Li6IDMg5qyh77yb5q+P5Liq5bel5YW35rWB5byP5qC35pys5a6e6ZmF5byA5aeLIDIg5qyh77yM5LiK6ZmQ5Li6IDMg5qyh44CCMjAg5qyh5qih5Z6L5bCd6K+V55qE54q25oCB5Z2H5Li6IGBSRUNFSVZFRGDjgIIKCiMjIOagt+acrOmqjOivgeiMg+WbtAoK5LiJ5Liq5Y2P5L2c6K6w5b2V6KaG55uW5Y2P5L2c5bel5YW36IqC54K544CB5Lik5Liq55yf5a6e5LiT5Lia5qih5Z6L6KeS6Imy5Lul5Y+K5Li75qih5Z6L5rGH5oC744CC5rWL6K+V55u05o6l5o+Q5Lqk5Y2P5L2c5bel5YW36K+35rGC77yM5Y2P5L2c5bel5YW36YCJ5oup5YeG56Gu546H5bCa5pyq6K+E5rWL44CC5q+P5Liq5qC35pys55qEIGBlbGFwc2VkX3NlY29uZHNgIOaYr+WvueW6lOajgOafpeeahOaVtOS9k+iAl+aXtu+8jOaXoOazleS7jui/meS4quWtl+auteaOqOWvvOavj+asoeaooeWei+iwg+eUqOeahCBUVEZU44CBUDk1IOaIluaMgee7reWQnuWQkOOAggoKfCDorrDlvZUgfCDmqKHlnovlsJ3or5UgfCDovpPlhaUgdG9rZW4gfCDovpPlh7ogdG9rZW4gfCDnvJPlrZjlkb3kuK3ovpPlhaUgfCDnvJPlrZjmnKrlkb3kuK3ovpPlhaUgfCDmgLsgdG9rZW4gfCDmlbTkvZPogJfml7YgfAp8IC0tLSB8IC0tLTogfCAtLS06IHwgLS0tOiB8IC0tLTogfCAtLS06IHwgLS0tOiB8IC0tLTogfAp8IGBjb2xsYWJvcmF0aW9uLW1vZGVsLmpzb25gIHwgNSB8IDQ5NzcgfCA2NTEgfCA2NDAgfCA0MzM3IHwgNTYyOCB8IDQuMDk4IOenkiB8CnwgYGNvbGxhYm9yYXRpb24tZHVyYWJsZS5qc29uYCB8IDUgfCA1MDA0IHwgNjM2IHwgMjY4OCB8IDIzMTYgfCA1NjQwIHwgNC40NzIg56eSIHwKfCBgY29sbGFib3JhdGlvbi1jb250ZXh0Lmpzb25gIHwgNSB8IDUwNjMgfCA3MjkgfCAxNjY0IHwgMzM5OSB8IDU3OTIgfCA0LjU4NCDnp5IgfAp8IOWNj+S9nOagt+acrOWQiOiuoSB8IDE1IHwgMTUwNDQgfCAyMDE2IHwgNDk5MiB8IDEwMDUyIHwgMTcwNjAgfCDigJQgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCAxIHwgMjQyMiB8IDM2MCB8IDIxNzYgfCAyNDYgfCAyNzgyIHwgMy4xMDEg56eSIHwKfCBgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYCB8IDIgfCA1MjIwIHwgMjM1IHwgNDczNiB8IDQ4NCB8IDU0NTUgfCAzLjE2NCDnp5IgfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCB8IDIgfCA1MjA4IHwgMjQ4IHwgNDczNiB8IDQ3MiB8IDU0NTYgfCAyLjkyNCDnp5IgfAp8IOWFqOmDqOWQiOiuoSB8IDIwIHwgMjc4OTQgfCAyODU5IHwgMTY2NDAgfCAxMTI1NCB8IDMwNzUzIHwg4oCUIHwKCue8k+WtmOi+k+WFpeW3sue7j+WMheWQq+WcqCBgaW5wdXRfdG9rZW5zYCDkuK3jgILkuInkuKrljY/kvZzmoLfmnKzlkIjorqHnvJPlrZjovpPlhaXljaDmr5TkuLogYDQ5OTIgLyAxNTA0NCDiiYggMzMuMTglYOOAguiuoeeul+aAu+i+k+WFpemHj+aXtuS4jeiDveWGjeasoeWKoOS4iue8k+WtmOi+k+WFpeOAguaJgOacieiusOW9leWdh+e8uuWwkei0puWNlee8luWPt+S4juiwg+eUqOaXtueahOS7t+agvOW/q+eFp++8jOWunumZhei0puWNleaJo+i0ueacquefpeOAggoK5rWB5byP5qC35pys5Y+m6KGM6aqM6K+B55yf5a6e5paH5pys55Sf5oiQ44CB5oyB5LmF5aKe6YeP5LqL5Lu25ZKM55yf5a6eIEhUVFAg5pat57q/57ut5Lyg44CC6K6w5b2V5YyF5ZCrIDIg5qyhIFNTRSDov57mjqXjgIE3IOadoeaWh+acrOS6i+S7tu+8m+mmluasoeWPr+ingeaWh+acrOe6piAxLjc0MSDnp5LvvIzlj5HpgIHlmajop4Llr5/liLDpppbkuKrmlofmnKznuqYgMC44MjMg56eS44CC5Lik5Liq5pWw5YC855qE6K6h5pe26LW354K55ZKM6KeC5a+f5L2N572u5LiN5ZCM77yM5LiN6IO955u05o6l5L2c5Li6572R57uc6ICX5pe255u45YeP44CCYHRleHRfY2h1bmtzPTM2MGAg5piv5paH5pys54mH5q616K6h5pWw77yM5pys5qC35pys5LiO6L6T5Ye6IHRva2VuIOaVsOWtl+ebuOWQjO+8jOWFtuS7luagt+acrOmcgOimgeaMieWQhOiHqiB1c2FnZSDorqHph4/jgIIKCuW3peWFt+a1geW8j+iusOW9leimhuebluS4u+aooeWei+eUn+aIkOW3peWFt+WPguaVsOOAgeWunumZheiuouWNleafpeivouOAgeacgOe7iOato+aWh+S4jumihOeul+e7k+eul+OAgmBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCDnmoTpqozmlLbnirbmgIHkuLogVkVSSUZJRUTvvIzorrDlvZUgMSDmrKHlt6XlhbfosIPnlKjlkowgMyDmnaHmnIDnu4jmraPmlofkuovku7bjgIJgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYCDnmoTpqozmlLbnirbmgIHkuLogRkFJTEVE77yM5YW25LitIDIg5qyh5qih5Z6L6LCD55So5bey57uP5pS25YiwIHVzYWdl77yM5Zug5q2k6K6h5YWl5oC75qyh5pWw5LiO6LS555So44CCCgrkuInkuKrljY/kvZzorrDlvZXlj4ogYHN0cmVhbWluZy1tb2RlbC5qc29uYCDlj6rmnInnm7jlr7nogJfml7bvvIzmsqHmnInml6XljobotbfmraLml7bpl7TjgILkuKTkuKrlt6XlhbfmtYHlvI/orrDlvZXljIXlkKsgVVRDIOi1t+atouaXtumXtO+8mgoKfCDorrDlvZUgfCBgc3RhcnRlZF9hdGAgfCBgZmluaXNoZWRfYXRgIHwg5YyX5Lqs5pe26Ze0IHwKfCAtLS0gfCAtLS0gfCAtLS0gfCAtLS0gfAp8IGBzdHJlYW1pbmctdG9vbC1hdHRlbXB0Lmpzb25gIHwgYDIwMjYtMDktMjVUMTU6MDI6MTQuOTQ4ODA1WmAgfCBgMjAyNi0wOS0yNVQxNTowMjoxOC4xMTMxMjlaYCB8IDIzOjAyOjE04oCUMjM6MDI6MTggfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCB8IGAyMDI2LTA5LTI1VDE1OjAzOjI1LjYxOTg5MVpgIHwgYDIwMjYtMDktMjVUMTU6MDM6MjguNTQ0MTYwWmAgfCAyMzowMzoyNeKAlDIzOjAzOjI4IHwKCiMjIDIwMjYtMDktMjUg5p+l6K+i55qE5a6Y5pa55Lu35qC8CgpEZWVwU2VlayDlrpjmlrnkuK3mlofku7fmoLzpobXliJflh7ogYGRlZXBzZWVrLWZsYXNoYO+8jOWvueW6lOaooeWei+eJiOacrOS4uiBEZWVwU2Vlay1WNC4xLUZsYXNo44CC5q+P55m+5LiHIHRva2VuIOeahOS6uuawkeW4geWNleS7t+WmguS4i+OAgltEZWVwU2VlayDlrpjmlrnmqKHlnovkuI7ku7fmoLxdKGh0dHBzOi8vYXBpLWRvY3MuZGVlcHNlZWsuY29tL3poLWNuL3F1aWNrX3N0YXJ0L3ByaWNpbmcvKQoKfCDorqHku7fpobnnm64gfCDnqbrpl7Lml7bmrrUgfCDpq5jls7Dml7bmrrUgfAp8IC0tLSB8IC0tLTogfCAtLS06IHwKfCDnvJPlrZjlkb3kuK3ovpPlhaUgfCAwLjAyIOWFgyB8IDAuMDQg5YWDIHwKfCDnvJPlrZjmnKrlkb3kuK3ovpPlhaUgfCAxIOWFgyB8IDIg5YWDIHwKfCDovpPlh7ogfCA0IOWFgyB8IDgg5YWDIHwKCuWumOaWueWumuS5ieWMl+S6rOaXtumXtOWRqOS4gOiHs+WRqOS6lOeahCA5OjAw4oCUMTI6MDDjgIExNDowMOKAlDE4OjAwIOS4uumrmOWzsOaXtuaute+8jOS4reWbveazleWumuiKguWBh+aXpemZpOWklu+8m+WFtuS9meaXtumXtOS4uuepuumXsuaXtuauteOAguS4pOS4quW3peWFt+agt+acrOeahOW3suefpeaXtumXtOWxnuS6juepuumXsuaXtuaute+8m+WFtuS7liAxNiDmrKHosIPnlKjmjInkuKTnp43ml7bmrrXkvLDnrpfjgILotLnnlKjkvb/nlKjov5nmrKHmn6Xor6LliLDnmoTku7fmoLzvvIzlrp7pmYXmiaPotLnku43pnIDmoLjlr7nkvpvlupTllYbotKbljZXjgIIKCmBgYHRleHQK5pyq5ZG95Lit6L6T5YWlID0gaW5wdXRfdG9rZW5zIC0gaW5wdXRfdG9rZW5fZGV0YWlscy5jYWNoZV9yZWFkCuS8sOeul+i0ueeUqCA9ICjmnKrlkb3kuK3ovpPlhaUgw5cg5pyq5ZG95Lit5Y2V5Lu3CiAgICAgICAgICArIOe8k+WtmOWRveS4rei+k+WFpSDDlyDnvJPlrZjlkb3kuK3ljZXku7cKICAgICAgICAgICsgb3V0cHV0X3Rva2VucyDDlyDovpPlh7rljZXku7cpIC8gMTAwMDAwMApgYGAKCnwg6K6w5b2VIHwg6LS555So5Lyw566X5LiL6ZmQIHwg6LS555So5Lyw566X5LiK6ZmQIHwKfCAtLS0gfCAtLS06IHwgLS0tOiB8CnwgYGNvbGxhYm9yYXRpb24tbW9kZWwuanNvbmAgfCAwLjAwNjk1MzgwIOWFgyB8IDAuMDEzOTA3NjAg5YWDIHwKfCBgY29sbGFib3JhdGlvbi1kdXJhYmxlLmpzb25gIHwgMC4wMDQ5MTM3NiDlhYMgfCAwLjAwOTgyNzUyIOWFgyB8CnwgYGNvbGxhYm9yYXRpb24tY29udGV4dC5qc29uYCB8IDAuMDA2MzQ4Mjgg5YWDIHwgMC4wMTI2OTY1NiDlhYMgfAp8IOWNj+S9nOagt+acrOWQiOiuoSB8IDAuMDE4MjE1ODQg5YWDIHwgMC4wMzY0MzE2OCDlhYMgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCAwLjAwMTcyOTUyIOWFgyB8IDAuMDAzNDU5MDQg5YWDIHwKfCBgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYO+8jOW3suefpeepuumXsuaXtuautSB8IDAuMDAxNTE4NzIg5YWDIHwgMC4wMDE1MTg3MiDlhYMgfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYO+8jOW3suefpeepuumXsuaXtuautSB8IDAuMDAxNTU4NzIg5YWDIHwgMC4wMDE1NTg3MiDlhYMgfAp8IOWFqOmDqOWQiOiuoSB8IDAuMDIzMDIyODAg5YWDIHwgMC4wNDI5NjgxNiDlhYMgfAoK5Lik5Liq5bel5YW35qC35pys5ZCI6K6h5Lyw566X6LS555So5Li6IDAuMDAzMDc3NDQg5YWD44CC5YW25L2Z6K6w5b2V55qE5Lik5YiX5YiG5Yir6YeH55So56m66Zey5LiO6auY5bOw5Y2V5Lu344CC5a6e6ZmF5omj6LS56L+Y6ZyA5LiO5L6b5bqU5ZWG6LSm5Y2V5Y+K5b2T5pe25Lu35qC85qC45a+577yM6LWg6YCB5L2Z6aKd5omj5YeP5Lmf5Lya5b2x5ZON5YWF5YC85L2Z6aKd5Y+Y5YyW44CCCgojIyDlj6/ku6XlpI3nrpfnmoQgUG93ZXJTaGVsbCDlkb3ku6QKCuWcqOivvuS7tumhueebrueahCBgcHJvamVjdC9gIOaVmeWtpuS7o+eggeebruW9leaJp+ihjOOAgui/meauteWRveS7pOWPquivu+WPluWbuuWumuWFreS4qiBKU09OIOaWh+S7tuW5tui/m+ihjCBEZWNpbWFsIOiuoeeul++8jOS4jeS6p+eUn+aooeWei+iwg+eUqOOAgui+k+WHuuWIhuWIq+WIl+WHuuS4pOenjeS7t+ebrumHkemine+8m+S4pOS4quW3peWFt+agt+acrOS9v+eUqCBgb2ZmX3BlYWtfY255YO+8jOWFtuS7luagt+acrOS/neeVmeS4pOaho+iMg+WbtOOAggoKYGBgcG93ZXJzaGVsbAokbmFtZXMgPSBAKAogICAgJ2NvbGxhYm9yYXRpb24tbW9kZWwnLCAnY29sbGFib3JhdGlvbi1kdXJhYmxlJywgJ2NvbGxhYm9yYXRpb24tY29udGV4dCcsCiAgICAnc3RyZWFtaW5nLW1vZGVsJywgJ3N0cmVhbWluZy10b29sLWF0dGVtcHQnLCAnc3RyZWFtaW5nLXRvb2wtbW9kZWwnCikKZm9yZWFjaCAoJG5hbWUgaW4gJG5hbWVzKSB7CiAgICAkcmVjb3JkID0gR2V0LUNvbnRlbnQgImRvY3MvY291cnNlL3ZlcmlmaWNhdGlvbi8kbmFtZS5qc29uIiAtUmF3IHwgQ29udmVydEZyb20tSnNvbgogICAgW2RlY2ltYWxdJGlucHV0VG9rZW5zID0gMAogICAgW2RlY2ltYWxdJG91dHB1dFRva2VucyA9IDAKICAgIFtkZWNpbWFsXSRjYWNoZWRUb2tlbnMgPSAwCiAgICBmb3JlYWNoICgkYXR0ZW1wdCBpbiAkcmVjb3JkLmF0dGVtcHRzKSB7CiAgICAgICAgJGlucHV0VG9rZW5zICs9ICRhdHRlbXB0LnVzYWdlLmlucHV0X3Rva2VucwogICAgICAgICRvdXRwdXRUb2tlbnMgKz0gJGF0dGVtcHQudXNhZ2Uub3V0cHV0X3Rva2VucwogICAgICAgICRjYWNoZWRUb2tlbnMgKz0gJGF0dGVtcHQudXNhZ2UuaW5wdXRfdG9rZW5fZGV0YWlscy5jYWNoZV9yZWFkCiAgICB9CiAgICAkbWlzc2VkVG9rZW5zID0gJGlucHV0VG9rZW5zIC0gJGNhY2hlZFRva2VucwogICAgJG9mZlBlYWsgPSAoJG1pc3NlZFRva2VucyArICRjYWNoZWRUb2tlbnMgKiBbZGVjaW1hbF0nMC4wMicgKyAkb3V0cHV0VG9rZW5zICogNCkgLyAxMDAwMDAwCiAgICBbcHNjdXN0b21vYmplY3RdQHsKICAgICAgICBzYW1wbGUgPSAkbmFtZQogICAgICAgIGF0dGVtcHRzID0gJHJlY29yZC5zdGFydGVkX2F0dGVtcHRzCiAgICAgICAgaW5wdXRfdG9rZW5zID0gJGlucHV0VG9rZW5zCiAgICAgICAgb3V0cHV0X3Rva2VucyA9ICRvdXRwdXRUb2tlbnMKICAgICAgICBjYWNoZV9yZWFkID0gJGNhY2hlZFRva2VucwogICAgICAgIGNhY2hlX21pc3MgPSAkbWlzc2VkVG9rZW5zCiAgICAgICAgb2ZmX3BlYWtfY255ID0gJG9mZlBlYWsKICAgICAgICBwZWFrX2NueSA9ICRvZmZQZWFrICogMgogICAgfQp9CmBgYAoKIyMg5Lia5Yqh6YeP5Lyw566X57uD5LmgCgrmnKznu4PkuaDlj6rph4fnlKjkuInkuKrljY/kvZzmoLfmnKznmoTlubPlnYflgLzjgILlgYforr7mnKrmnaXkuJrliqHkv53mjIHlhbbovpPlhaXjgIHovpPlh7rjgIHnvJPlrZjmr5TkvovkuI4gNSDmrKHmqKHlnovlsJ3or5XvvIwxMDAwIOS4quS4muWKoemihOiuoemcgOimgSA1MDAwIOasoeaooeWei+WwneivleOAgee6piA1MDE0NjY3IOS4qui+k+WFpSB0b2tlbuOAgTY3MjAwMCDkuKrovpPlh7ogdG9rZW7jgILovpPlhaXkuK3nuqYgMTY2NDAwMCDkuKogdG9rZW4g5ZG95Lit57yT5a2Y77yM57qmIDMzNTA2Njcg5LiqIHRva2VuIOacquWRveS4ree8k+WtmOOAguaMieeFp+acquWPluaVtOeahOW5s+Wdh+WAvOiuoeeul++8jOi0ueeUqOe6puS4uiA2LjA3MTk0NyDlhYPmiJYgMTIuMTQzODkzIOWFg+OAgua1geW8j+agt+acrOWxnuS6juWPpuS4gOenjeaJp+ihjOiMg+WbtO+8jOS4jeWKoOWFpei/mee7hOS4muWKoeW5s+Wdh+WAvOOAggoK5aaC5p6c5q+P5YiG6ZKf5Yiw6L6+IDMwIOS4quWQjOexu+S4muWKoe+8jOWImeacn+acm+iwg+eUqOmHj+S4uiAxNTAg5qyhL+WIhumSn++8jOaAuyB0b2tlbiDkuLogMTcwNjAwL+WIhumSn+OAgumineWkluWwneivleaVsOmHj+aMieato+W4uOiwg+eUqOeahCA1JSDkvLDnrpfml7bvvIzmnJ/mnJvosIPnlKjph4/kuLogMTU3LjUg5qyhL+WIhumSn++8jOaAuyB0b2tlbiDkuLogMTc5MTMwL+WIhumSn+OAguinhOWIkuivt+axguS4iumZkOaXtuW6lOWwhuasoeaVsOWQkeS4iuWPluaVtO+8jOW5tuWIhuWIq+ajgOafpeS+m+W6lOWVhuWvuei+k+WFpeOAgei+k+WHuuWSjOW5tuWPkeeahOWFt+S9k+mZkOWItuOAggoK5Lia5Yqh5Lyw566X6ZyA6KaB5L+d55WZ5Lul5LiL5YGH6K6+77ya5Lia5Yqh57G75Yir5q+U5L6L5LiN5Y+Y44CB6L6T5YWl6ZW/5bqm5YiG5biD5LiN5Y+Y44CB57yT5a2Y5ZG95Lit5q+U5L6L5LiN5Y+Y44CB5LiT5Lia6KeS6Imy5pWw6YeP5LiN5Y+Y44CB5rKh5pyJ5paw5aKe5pGY6KaB6LCD55So44CB5rKh5pyJ5paw5aKe5Lia5Yqh6YeN6K+V44CC55yf5a6e5rWB6YeP5Y+Y5YyW5ZCO6ZyA6KaB6YeN5paw6YeH5qC35ZKM6K6h566X44CC6aKE566X5omj5YeP44CB6YeN5aSN57uT566X44CB5p2D6ZmQ44CB5a6h5om55ZKM54i26L+Q6KGM57Sv6K6h5qyh5pWw5LiK6ZmQ5bqU57un57ut6YCa6L+H5a+55bqU55yf5a6e5pWw5o2u5bqT5rWL6K+V6aqM6K+B44CCCgojIyDmoLfmnKznu5PorrrkuI7mtYvph4/ojIPlm7QKCui/meS6m+agt+acrOWPr+S7peivtOaYjuS4gOasoeWNj+S9nOivt+axguWMheWQq+Wkmuasoeiuoei0ueiwg+eUqO+8jOW5tuWxleekuue8k+WtmOi+k+WFpeeahOeLrOeri+iuoeS7t+aWueazleOAguS4ieS7veagt+acrOeahOi+k+WHuumVv+W6puWSjOe8k+WtmOmHj+S4jeWQjO+8jOavj+S4qumYtuauteWPquacieS4gOS4quWNj+S9nOagt+acrO+8jOaXoOazleaNruatpOiuoeeul+aMgeS5heWMluWbuuWumuiAl+aXtuOAgeWkmiBBZ2VudCDliqDpgJ/mr5TjgIHkuIrkuIvmlofkvJjljJboioLnnIHmr5TkvovmiJbmlbTkvZPkuJrliqHlh4bnoa7njofjgIIKCuaAp+iDveWvueeFp+mcgOimgeWbuuWumuS4muWKoeaVsOaNruOAgXByb21wdOOAgeaooeWei+eJiOacrOOAgei+k+WHuumZkOWItuOAgei/nuaOpeWIneWni+eKtuaAgeWPiue8k+WtmOadoeS7tu+8m+WIhuWIq+iusOW9leS4k+S4muinkuiJsuOAgeS4u+aooeWei+WSjOW3peWFt+iwg+eUqOiAl+aXtuOAguiwg+eUqOasoeaVsOS4iumZkOOAgXRva2VuIOS4iumZkOOAgeacgOmVv+i/kOihjOaXtumXtOmcgOimgeWcqOaJp+ihjOWJjeWGmeWFpeiusOW9leOAguW9k+WJjeadkOaWmeWkjeeUqOW3suaciSAyMCDmrKHosIPnlKjvvIzotLnnlKjorqHnrpfov4fnqIvmlrDlop7mqKHlnovosIPnlKjmlbDph4/kuLogMOOAggoKIyMg5paH5Lu25oyH57q5Cgrku6XkuIsgU0hBMjU2IOWvueW6lOacrOadkOaWmeivu+WPlueahOWOn+Wni+iusOW9leOAguaWh+S7tuWGheWuueWPmOWMluaXtumcgOimgemHjeaWsOe7n+iuoe+8jOWQjOaXtuabtOaWsOacrOadkOaWmeS4reeahOmqjOivgeiMg+WbtOOAggoKfCDmlofku7YgfCBTSEEyNTYgfAp8IC0tLSB8IC0tLSB8CnwgYGNvbGxhYm9yYXRpb24tbW9kZWwuanNvbmAgfCBgNDFiYzAyOWYwMjkzYjVjOGVlMGExODdjMWI2N2QzYTIzZmM1ZTExMDg0ZmVmYWJmYzhkZGI1NTdjOGZlNjM0YWAgfAp8IGBjb2xsYWJvcmF0aW9uLWR1cmFibGUuanNvbmAgfCBgYjI5ZWE1ZWQ5Njk1NzJkNzU0ZDIyNWUzNTgyZTk5MWU2MDM0MmNlYTU0OTdkYmFlNjllNDkzZDY4MDExMTFlOWAgfAp8IGBjb2xsYWJvcmF0aW9uLWNvbnRleHQuanNvbmAgfCBgMGUxZTlhMDQ4Y2U0YjE1M2U2ZjcxMDIwYmI4NTAzODFhYjIwMjZiZjc1ZjFiNjQ5MWQxYzlkMzFjZmM4ZTk0Y2AgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCBgYjI4ZGJmMjMyMWRlZjdiODkxMTRjZGIxYmVlZmFhZDU1MTRiNjU0Nzk3ZmM1ODk3ZWY5MjA3NTNjYTY5N2I5ZmAgfAp8IGBzdHJlYW1pbmctdG9vbC1hdHRlbXB0Lmpzb25gIHwgYDg4NzU3YzU3NDM3NTlhZmFmZDlmZDAxZjQzMDFjNDMwZjI3OTg1MjAzMzU4YWRkNGYzNWY0MzI5Yzc5MWJmYjhgIHwKfCBgc3RyZWFtaW5nLXRvb2wtbW9kZWwuanNvbmAgfCBgNWY0M2E2OTViY2MyNGExZTkxOTg1ZDAxNWNlYWQwMjhlMzEwMWMyMjJjNGE1OWY1YTRmYTk1ZGEyYmJiYWNjY2AgfAo=">下载本文源文件 <span aria-hidden="true">↓</span></a></div>
+      <nav class="related-lessons" aria-label="相关课程"><p>相关课程</p><a href="../articles/lesson-04.html"><span>第四课</span>上下文、模型推理与流式响应</a><a href="../articles/lesson-05.html"><span>第五课</span>部署、运维与项目交付</a></nav>
+    </aside>
+    <main id="article-content" tabindex="-1">
+      <nav class="material-tabs" aria-label="配套资料导航"><a href="./branch-guide.html">环境操作</a><a href="./gpu-deployment-lab.html">推理部署</a><a href="./model-sample-analysis.html" aria-current="page">模型用量</a></nav>
+      <details class="mobile-toc material-toc"><summary>本文目录</summary><nav aria-label="本文章节"><ol><li><a href="#section-1"><span class="toc-number">01</span><span>样本验证范围</span></a></li><li><a href="#section-2"><span class="toc-number">02</span><span>2026-09-25 查询的官方价格</span></a></li><li><a href="#section-3"><span class="toc-number">03</span><span>可以复算的 PowerShell 命令</span></a></li><li><a href="#section-4"><span class="toc-number">04</span><span>业务量估算练习</span></a></li><li><a href="#section-5"><span class="toc-number">05</span><span>样本结论与测量范围</span></a></li><li><a href="#section-6"><span class="toc-number">06</span><span>文件指纹</span></a></li></ol></nav></details>
+      <article class="article-body material"><p>本材料使用教学代码仓库 <code>docs/course/verification/</code> 下的三个协作记录、一个正文流式记录和两个工具流式记录。六个记录均使用 <code>deepseek-flash</code>。每个协作样本实际开始 5 次模型尝试，上限为 6 次；正文流式样本实际开始 1 次，上限为 3 次；每个工具流式样本实际开始 2 次，上限为 3 次。20 次模型尝试的状态均为 <code>RECEIVED</code>。</p>
+<h2 id="section-1">样本验证范围</h2>
+<p>三个协作记录覆盖协作工具节点、两个真实专业模型角色以及主模型汇总。测试直接提交协作工具请求，协作工具选择准确率尚未评测。每个样本的 <code>elapsed_seconds</code> 是对应检查的整体耗时，无法从这个字段推导每次模型调用的 TTFT、P95 或持续吞吐。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="资料表格，可横向滚动"><table><thead>
+<tr>
+<th>记录</th>
+<th style="text-align:right">模型尝试</th>
+<th style="text-align:right">输入 token</th>
+<th style="text-align:right">输出 token</th>
+<th style="text-align:right">缓存命中输入</th>
+<th style="text-align:right">缓存未命中输入</th>
+<th style="text-align:right">总 token</th>
+<th style="text-align:right">整体耗时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collaboration-model.json</code></td>
+<td style="text-align:right">5</td>
+<td style="text-align:right">4977</td>
+<td style="text-align:right">651</td>
+<td style="text-align:right">640</td>
+<td style="text-align:right">4337</td>
+<td style="text-align:right">5628</td>
+<td style="text-align:right">4.098 秒</td>
+</tr>
+<tr>
+<td><code>collaboration-durable.json</code></td>
+<td style="text-align:right">5</td>
+<td style="text-align:right">5004</td>
+<td style="text-align:right">636</td>
+<td style="text-align:right">2688</td>
+<td style="text-align:right">2316</td>
+<td style="text-align:right">5640</td>
+<td style="text-align:right">4.472 秒</td>
+</tr>
+<tr>
+<td><code>collaboration-context.json</code></td>
+<td style="text-align:right">5</td>
+<td style="text-align:right">5063</td>
+<td style="text-align:right">729</td>
+<td style="text-align:right">1664</td>
+<td style="text-align:right">3399</td>
+<td style="text-align:right">5792</td>
+<td style="text-align:right">4.584 秒</td>
+</tr>
+<tr>
+<td>协作样本合计</td>
+<td style="text-align:right">15</td>
+<td style="text-align:right">15044</td>
+<td style="text-align:right">2016</td>
+<td style="text-align:right">4992</td>
+<td style="text-align:right">10052</td>
+<td style="text-align:right">17060</td>
+<td style="text-align:right">—</td>
+</tr>
+<tr>
+<td><code>streaming-model.json</code></td>
+<td style="text-align:right">1</td>
+<td style="text-align:right">2422</td>
+<td style="text-align:right">360</td>
+<td style="text-align:right">2176</td>
+<td style="text-align:right">246</td>
+<td style="text-align:right">2782</td>
+<td style="text-align:right">3.101 秒</td>
+</tr>
+<tr>
+<td><code>streaming-tool-attempt.json</code></td>
+<td style="text-align:right">2</td>
+<td style="text-align:right">5220</td>
+<td style="text-align:right">235</td>
+<td style="text-align:right">4736</td>
+<td style="text-align:right">484</td>
+<td style="text-align:right">5455</td>
+<td style="text-align:right">3.164 秒</td>
+</tr>
+<tr>
+<td><code>streaming-tool-model.json</code></td>
+<td style="text-align:right">2</td>
+<td style="text-align:right">5208</td>
+<td style="text-align:right">248</td>
+<td style="text-align:right">4736</td>
+<td style="text-align:right">472</td>
+<td style="text-align:right">5456</td>
+<td style="text-align:right">2.924 秒</td>
+</tr>
+<tr>
+<td>全部合计</td>
+<td style="text-align:right">20</td>
+<td style="text-align:right">27894</td>
+<td style="text-align:right">2859</td>
+<td style="text-align:right">16640</td>
+<td style="text-align:right">11254</td>
+<td style="text-align:right">30753</td>
+<td style="text-align:right">—</td>
+</tr>
+</tbody>
+</table></div><p>缓存输入已经包含在 <code>input_tokens</code> 中。三个协作样本合计缓存输入占比为 <code>4992 / 15044 ≈ 33.18%</code>。计算总输入量时不能再次加上缓存输入。所有记录均缺少账单编号与调用时的价格快照，实际账单扣费未知。</p>
+<p>流式样本另行验证真实文本生成、持久增量事件和真实 HTTP 断线续传。记录包含 2 次 SSE 连接、7 条文本事件；首次可见文本约 1.741 秒，发送器观察到首个文本约 0.823 秒。两个数值的计时起点和观察位置不同，不能直接作为网络耗时相减。<code>text_chunks=360</code> 是文本片段计数，本样本与输出 token 数字相同，其他样本需要按各自 usage 计量。</p>
+<p>工具流式记录覆盖主模型生成工具参数、实际订单查询、最终正文与预算结算。<code>streaming-tool-model.json</code> 的验收状态为 VERIFIED，记录 1 次工具调用和 3 条最终正文事件。<code>streaming-tool-attempt.json</code> 的验收状态为 FAILED，其中 2 次模型调用已经收到 usage，因此计入总次数与费用。</p>
+<p>三个协作记录及 <code>streaming-model.json</code> 只有相对耗时，没有日历起止时间。两个工具流式记录包含 UTC 起止时间：</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="资料表格，可横向滚动"><table><thead>
+<tr>
+<th>记录</th>
+<th><code>started_at</code></th>
+<th><code>finished_at</code></th>
+<th>北京时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>streaming-tool-attempt.json</code></td>
+<td><code>2026-09-25T15:02:14.948805Z</code></td>
+<td><code>2026-09-25T15:02:18.113129Z</code></td>
+<td>23:02:14—23:02:18</td>
+</tr>
+<tr>
+<td><code>streaming-tool-model.json</code></td>
+<td><code>2026-09-25T15:03:25.619891Z</code></td>
+<td><code>2026-09-25T15:03:28.544160Z</code></td>
+<td>23:03:25—23:03:28</td>
+</tr>
+</tbody>
+</table></div><h2 id="section-2">2026-09-25 查询的官方价格</h2>
+<p>DeepSeek 官方中文价格页列出 <code>deepseek-flash</code>，对应模型版本为 DeepSeek-V4.1-Flash。每百万 token 的人民币单价如下。<a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing/">DeepSeek 官方模型与价格</a></p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="资料表格，可横向滚动"><table><thead>
+<tr>
+<th>计价项目</th>
+<th style="text-align:right">空闲时段</th>
+<th style="text-align:right">高峰时段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>缓存命中输入</td>
+<td style="text-align:right">0.02 元</td>
+<td style="text-align:right">0.04 元</td>
+</tr>
+<tr>
+<td>缓存未命中输入</td>
+<td style="text-align:right">1 元</td>
+<td style="text-align:right">2 元</td>
+</tr>
+<tr>
+<td>输出</td>
+<td style="text-align:right">4 元</td>
+<td style="text-align:right">8 元</td>
+</tr>
+</tbody>
+</table></div><p>官方定义北京时间周一至周五的 9:00—12:00、14:00—18:00 为高峰时段，中国法定节假日除外；其余时间为空闲时段。两个工具样本的已知时间属于空闲时段；其他 16 次调用按两种时段估算。费用使用这次查询到的价格，实际扣费仍需核对供应商账单。</p>
+<div class="code-example" data-language="text"><div class="code-heading"><span>计算公式</span><button type="button" class="copy-code">复制代码</button></div><pre class="shiki github-dark" style="background-color:#24292e;color:#e1e4e8" tabindex="0"><code><span class="line"><span>未命中输入 = input_tokens - input_token_details.cache_read</span></span>
+<span class="line"><span>估算费用 = (未命中输入 × 未命中单价</span></span>
+<span class="line"><span>          + 缓存命中输入 × 缓存命中单价</span></span>
+<span class="line"><span>          + output_tokens × 输出单价) / 1000000</span></span>
+<span class="line"><span></span></span></code></pre></div><div class="table-scroll" tabindex="0" role="region" aria-label="资料表格，可横向滚动"><table><thead>
+<tr>
+<th>记录</th>
+<th style="text-align:right">费用估算下限</th>
+<th style="text-align:right">费用估算上限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collaboration-model.json</code></td>
+<td style="text-align:right">0.00695380 元</td>
+<td style="text-align:right">0.01390760 元</td>
+</tr>
+<tr>
+<td><code>collaboration-durable.json</code></td>
+<td style="text-align:right">0.00491376 元</td>
+<td style="text-align:right">0.00982752 元</td>
+</tr>
+<tr>
+<td><code>collaboration-context.json</code></td>
+<td style="text-align:right">0.00634828 元</td>
+<td style="text-align:right">0.01269656 元</td>
+</tr>
+<tr>
+<td>协作样本合计</td>
+<td style="text-align:right">0.01821584 元</td>
+<td style="text-align:right">0.03643168 元</td>
+</tr>
+<tr>
+<td><code>streaming-model.json</code></td>
+<td style="text-align:right">0.00172952 元</td>
+<td style="text-align:right">0.00345904 元</td>
+</tr>
+<tr>
+<td><code>streaming-tool-attempt.json</code>，已知空闲时段</td>
+<td style="text-align:right">0.00151872 元</td>
+<td style="text-align:right">0.00151872 元</td>
+</tr>
+<tr>
+<td><code>streaming-tool-model.json</code>，已知空闲时段</td>
+<td style="text-align:right">0.00155872 元</td>
+<td style="text-align:right">0.00155872 元</td>
+</tr>
+<tr>
+<td>全部合计</td>
+<td style="text-align:right">0.02302280 元</td>
+<td style="text-align:right">0.04296816 元</td>
+</tr>
+</tbody>
+</table></div><p>两个工具样本合计估算费用为 0.00307744 元。其余记录的两列分别采用空闲与高峰单价。实际扣费还需与供应商账单及当时价格核对，赠送余额扣减也会影响充值余额变化。</p>
+<h2 id="section-3">可以复算的 PowerShell 命令</h2>
+<p>在课件项目的 <code>project/</code> 教学代码目录执行。这段命令只读取固定六个 JSON 文件并进行 Decimal 计算，不产生模型调用。输出分别列出两种价目金额；两个工具样本使用 <code>off_peak_cny</code>，其他样本保留两档范围。</p>
+<div class="code-example" data-language="powershell"><div class="code-heading"><span>PowerShell</span><button type="button" class="copy-code">复制代码</button></div><pre class="shiki github-dark" style="background-color:#24292e;color:#e1e4e8" tabindex="0"><code><span class="line"><span style="color:#E1E4E8">$names </span><span style="color:#F97583">=</span><span style="color:#F97583"> @</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#9ECBFF">    'collaboration-model'</span><span style="color:#F97583">,</span><span style="color:#9ECBFF"> 'collaboration-durable'</span><span style="color:#F97583">,</span><span style="color:#9ECBFF"> 'collaboration-context'</span><span style="color:#F97583">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    'streaming-model'</span><span style="color:#F97583">,</span><span style="color:#9ECBFF"> 'streaming-tool-attempt'</span><span style="color:#F97583">,</span><span style="color:#9ECBFF"> 'streaming-tool-model'</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">foreach</span><span style="color:#E1E4E8"> ($name </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> $names) {</span></span>
+<span class="line"><span style="color:#E1E4E8">    $record </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> Get-Content</span><span style="color:#9ECBFF"> "docs/course/verification/</span><span style="color:#E1E4E8">$name</span><span style="color:#9ECBFF">.json"</span><span style="color:#F97583"> -</span><span style="color:#E1E4E8">Raw </span><span style="color:#F97583">|</span><span style="color:#79B8FF"> ConvertFrom-Json</span></span>
+<span class="line"><span style="color:#E1E4E8">    [</span><span style="color:#F97583">decimal</span><span style="color:#E1E4E8">]$inputTokens </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">    [</span><span style="color:#F97583">decimal</span><span style="color:#E1E4E8">]$outputTokens </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">    [</span><span style="color:#F97583">decimal</span><span style="color:#E1E4E8">]$cachedTokens </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#F97583">    foreach</span><span style="color:#E1E4E8"> ($attempt </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> $record.attempts) {</span></span>
+<span class="line"><span style="color:#E1E4E8">        $inputTokens </span><span style="color:#F97583">+=</span><span style="color:#E1E4E8"> $attempt.usage.input_tokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        $outputTokens </span><span style="color:#F97583">+=</span><span style="color:#E1E4E8"> $attempt.usage.output_tokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        $cachedTokens </span><span style="color:#F97583">+=</span><span style="color:#E1E4E8"> $attempt.usage.input_token_details.cache_read</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    $missedTokens </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $inputTokens </span><span style="color:#F97583">-</span><span style="color:#E1E4E8"> $cachedTokens</span></span>
+<span class="line"><span style="color:#E1E4E8">    $offPeak </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ($missedTokens </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> $cachedTokens </span><span style="color:#F97583">*</span><span style="color:#E1E4E8"> [</span><span style="color:#F97583">decimal</span><span style="color:#E1E4E8">]</span><span style="color:#9ECBFF">'0.02'</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> $outputTokens </span><span style="color:#F97583">*</span><span style="color:#79B8FF"> 4</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">/</span><span style="color:#79B8FF"> 1000000</span></span>
+<span class="line"><span style="color:#E1E4E8">    [</span><span style="color:#F97583">pscustomobject</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">@</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">        sample </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $name</span></span>
+<span class="line"><span style="color:#E1E4E8">        attempts </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $record.started_attempts</span></span>
+<span class="line"><span style="color:#E1E4E8">        input_tokens </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $inputTokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        output_tokens </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $outputTokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        cache_read </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $cachedTokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        cache_miss </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $missedTokens</span></span>
+<span class="line"><span style="color:#E1E4E8">        off_peak_cny </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $offPeak</span></span>
+<span class="line"><span style="color:#E1E4E8">        peak_cny </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> $offPeak </span><span style="color:#F97583">*</span><span style="color:#79B8FF"> 2</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span></code></pre></div><h2 id="section-4">业务量估算练习</h2>
+<p>本练习只采用三个协作样本的平均值。假设未来业务保持其输入、输出、缓存比例与 5 次模型尝试，1000 个业务预计需要 5000 次模型尝试、约 5014667 个输入 token、672000 个输出 token。输入中约 1664000 个 token 命中缓存，约 3350667 个 token 未命中缓存。按照未取整的平均值计算，费用约为 6.071947 元或 12.143893 元。流式样本属于另一种执行范围，不加入这组业务平均值。</p>
+<p>如果每分钟到达 30 个同类业务，则期望调用量为 150 次/分钟，总 token 为 170600/分钟。额外尝试数量按正常调用的 5% 估算时，期望调用量为 157.5 次/分钟，总 token 为 179130/分钟。规划请求上限时应将次数向上取整，并分别检查供应商对输入、输出和并发的具体限制。</p>
+<p>业务估算需要保留以下假设：业务类别比例不变、输入长度分布不变、缓存命中比例不变、专业角色数量不变、没有新增摘要调用、没有新增业务重试。真实流量变化后需要重新采样和计算。预算扣减、重复结算、权限、审批和父运行累计次数上限应继续通过对应真实数据库测试验证。</p>
+<h2 id="section-5">样本结论与测量范围</h2>
+<p>这些样本可以说明一次协作请求包含多次计费调用，并展示缓存输入的独立计价方法。三份样本的输出长度和缓存量不同，每个阶段只有一个协作样本，无法据此计算持久化固定耗时、多 Agent 加速比、上下文优化节省比例或整体业务准确率。</p>
+<p>性能对照需要固定业务数据、prompt、模型版本、输出限制、连接初始状态及缓存条件；分别记录专业角色、主模型和工具调用耗时。调用次数上限、token 上限、最长运行时间需要在执行前写入记录。当前材料复用已有 20 次调用，费用计算过程新增模型调用数量为 0。</p>
+<h2 id="section-6">文件指纹</h2>
+<p>以下 SHA256 对应本材料读取的原始记录。文件内容变化时需要重新统计，同时更新本材料中的验证范围。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="资料表格，可横向滚动"><table><thead>
+<tr>
+<th>文件</th>
+<th>SHA256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collaboration-model.json</code></td>
+<td><code>41bc029f0293b5c8ee0a187c1b67d3a23fc5e11084fefabfc8ddb557c8fe634a</code></td>
+</tr>
+<tr>
+<td><code>collaboration-durable.json</code></td>
+<td><code>b29ea5ed969572d754d225e3582e991e60342cea5497dbae69e493d6801111e9</code></td>
+</tr>
+<tr>
+<td><code>collaboration-context.json</code></td>
+<td><code>0e1e9a048ce4b153e6f71020bb850381ab2026bf75f1b6491d1c9d31cfc8e94c</code></td>
+</tr>
+<tr>
+<td><code>streaming-model.json</code></td>
+<td><code>b28dbf2321def7b89114cdb1beefaad5514b654797fc5897ef920753ca697b9f</code></td>
+</tr>
+<tr>
+<td><code>streaming-tool-attempt.json</code></td>
+<td><code>88757c5743759afafd9fd01f4301c430f27985203358add4f35f4329c791bfb8</code></td>
+</tr>
+<tr>
+<td><code>streaming-tool-model.json</code></td>
+<td><code>5f43a695bcc24a1e91985d015cead028e3101c222c4a59f5a4fa95da2bbbaccc</code></td>
+</tr>
+</tbody>
+</table></div></article>
+      <footer class="article-footer"><p>智服中台 · 模型用量</p><a href="#top">返回顶部 ↑</a></footer>
+      <nav class="related-lessons mobile-related" aria-label="相关课程"><p>相关课程</p><a href="../articles/lesson-04.html"><span>第四课</span>上下文、模型推理与流式响应</a><a href="../articles/lesson-05.html"><span>第五课</span>部署、运维与项目交付</a><a href="../source.html?stage=09-course-delivery">阅读阶段源码 ↗</a><a href="./model-sample-analysis.md" download="model-sample-analysis.md" data-download-content="IyAyMCDmrKHnnJ/lrp7mqKHlnovosIPnlKjnmoQgdG9rZW4g5LiO6LS555So5YiG5p6QCgrmnKzmnZDmlpnkvb/nlKjmlZnlrabku6PnoIHku5PlupMgYGRvY3MvY291cnNlL3ZlcmlmaWNhdGlvbi9gIOS4i+eahOS4ieS4quWNj+S9nOiusOW9leOAgeS4gOS4quato+aWh+a1geW8j+iusOW9leWSjOS4pOS4quW3peWFt+a1geW8j+iusOW9leOAguWFreS4quiusOW9leWdh+S9v+eUqCBgZGVlcHNlZWstZmxhc2hg44CC5q+P5Liq5Y2P5L2c5qC35pys5a6e6ZmF5byA5aeLIDUg5qyh5qih5Z6L5bCd6K+V77yM5LiK6ZmQ5Li6IDYg5qyh77yb5q2j5paH5rWB5byP5qC35pys5a6e6ZmF5byA5aeLIDEg5qyh77yM5LiK6ZmQ5Li6IDMg5qyh77yb5q+P5Liq5bel5YW35rWB5byP5qC35pys5a6e6ZmF5byA5aeLIDIg5qyh77yM5LiK6ZmQ5Li6IDMg5qyh44CCMjAg5qyh5qih5Z6L5bCd6K+V55qE54q25oCB5Z2H5Li6IGBSRUNFSVZFRGDjgIIKCiMjIOagt+acrOmqjOivgeiMg+WbtAoK5LiJ5Liq5Y2P5L2c6K6w5b2V6KaG55uW5Y2P5L2c5bel5YW36IqC54K544CB5Lik5Liq55yf5a6e5LiT5Lia5qih5Z6L6KeS6Imy5Lul5Y+K5Li75qih5Z6L5rGH5oC744CC5rWL6K+V55u05o6l5o+Q5Lqk5Y2P5L2c5bel5YW36K+35rGC77yM5Y2P5L2c5bel5YW36YCJ5oup5YeG56Gu546H5bCa5pyq6K+E5rWL44CC5q+P5Liq5qC35pys55qEIGBlbGFwc2VkX3NlY29uZHNgIOaYr+WvueW6lOajgOafpeeahOaVtOS9k+iAl+aXtu+8jOaXoOazleS7jui/meS4quWtl+auteaOqOWvvOavj+asoeaooeWei+iwg+eUqOeahCBUVEZU44CBUDk1IOaIluaMgee7reWQnuWQkOOAggoKfCDorrDlvZUgfCDmqKHlnovlsJ3or5UgfCDovpPlhaUgdG9rZW4gfCDovpPlh7ogdG9rZW4gfCDnvJPlrZjlkb3kuK3ovpPlhaUgfCDnvJPlrZjmnKrlkb3kuK3ovpPlhaUgfCDmgLsgdG9rZW4gfCDmlbTkvZPogJfml7YgfAp8IC0tLSB8IC0tLTogfCAtLS06IHwgLS0tOiB8IC0tLTogfCAtLS06IHwgLS0tOiB8IC0tLTogfAp8IGBjb2xsYWJvcmF0aW9uLW1vZGVsLmpzb25gIHwgNSB8IDQ5NzcgfCA2NTEgfCA2NDAgfCA0MzM3IHwgNTYyOCB8IDQuMDk4IOenkiB8CnwgYGNvbGxhYm9yYXRpb24tZHVyYWJsZS5qc29uYCB8IDUgfCA1MDA0IHwgNjM2IHwgMjY4OCB8IDIzMTYgfCA1NjQwIHwgNC40NzIg56eSIHwKfCBgY29sbGFib3JhdGlvbi1jb250ZXh0Lmpzb25gIHwgNSB8IDUwNjMgfCA3MjkgfCAxNjY0IHwgMzM5OSB8IDU3OTIgfCA0LjU4NCDnp5IgfAp8IOWNj+S9nOagt+acrOWQiOiuoSB8IDE1IHwgMTUwNDQgfCAyMDE2IHwgNDk5MiB8IDEwMDUyIHwgMTcwNjAgfCDigJQgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCAxIHwgMjQyMiB8IDM2MCB8IDIxNzYgfCAyNDYgfCAyNzgyIHwgMy4xMDEg56eSIHwKfCBgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYCB8IDIgfCA1MjIwIHwgMjM1IHwgNDczNiB8IDQ4NCB8IDU0NTUgfCAzLjE2NCDnp5IgfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCB8IDIgfCA1MjA4IHwgMjQ4IHwgNDczNiB8IDQ3MiB8IDU0NTYgfCAyLjkyNCDnp5IgfAp8IOWFqOmDqOWQiOiuoSB8IDIwIHwgMjc4OTQgfCAyODU5IHwgMTY2NDAgfCAxMTI1NCB8IDMwNzUzIHwg4oCUIHwKCue8k+WtmOi+k+WFpeW3sue7j+WMheWQq+WcqCBgaW5wdXRfdG9rZW5zYCDkuK3jgILkuInkuKrljY/kvZzmoLfmnKzlkIjorqHnvJPlrZjovpPlhaXljaDmr5TkuLogYDQ5OTIgLyAxNTA0NCDiiYggMzMuMTglYOOAguiuoeeul+aAu+i+k+WFpemHj+aXtuS4jeiDveWGjeasoeWKoOS4iue8k+WtmOi+k+WFpeOAguaJgOacieiusOW9leWdh+e8uuWwkei0puWNlee8luWPt+S4juiwg+eUqOaXtueahOS7t+agvOW/q+eFp++8jOWunumZhei0puWNleaJo+i0ueacquefpeOAggoK5rWB5byP5qC35pys5Y+m6KGM6aqM6K+B55yf5a6e5paH5pys55Sf5oiQ44CB5oyB5LmF5aKe6YeP5LqL5Lu25ZKM55yf5a6eIEhUVFAg5pat57q/57ut5Lyg44CC6K6w5b2V5YyF5ZCrIDIg5qyhIFNTRSDov57mjqXjgIE3IOadoeaWh+acrOS6i+S7tu+8m+mmluasoeWPr+ingeaWh+acrOe6piAxLjc0MSDnp5LvvIzlj5HpgIHlmajop4Llr5/liLDpppbkuKrmlofmnKznuqYgMC44MjMg56eS44CC5Lik5Liq5pWw5YC855qE6K6h5pe26LW354K55ZKM6KeC5a+f5L2N572u5LiN5ZCM77yM5LiN6IO955u05o6l5L2c5Li6572R57uc6ICX5pe255u45YeP44CCYHRleHRfY2h1bmtzPTM2MGAg5piv5paH5pys54mH5q616K6h5pWw77yM5pys5qC35pys5LiO6L6T5Ye6IHRva2VuIOaVsOWtl+ebuOWQjO+8jOWFtuS7luagt+acrOmcgOimgeaMieWQhOiHqiB1c2FnZSDorqHph4/jgIIKCuW3peWFt+a1geW8j+iusOW9leimhuebluS4u+aooeWei+eUn+aIkOW3peWFt+WPguaVsOOAgeWunumZheiuouWNleafpeivouOAgeacgOe7iOato+aWh+S4jumihOeul+e7k+eul+OAgmBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCDnmoTpqozmlLbnirbmgIHkuLogVkVSSUZJRUTvvIzorrDlvZUgMSDmrKHlt6XlhbfosIPnlKjlkowgMyDmnaHmnIDnu4jmraPmlofkuovku7bjgIJgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYCDnmoTpqozmlLbnirbmgIHkuLogRkFJTEVE77yM5YW25LitIDIg5qyh5qih5Z6L6LCD55So5bey57uP5pS25YiwIHVzYWdl77yM5Zug5q2k6K6h5YWl5oC75qyh5pWw5LiO6LS555So44CCCgrkuInkuKrljY/kvZzorrDlvZXlj4ogYHN0cmVhbWluZy1tb2RlbC5qc29uYCDlj6rmnInnm7jlr7nogJfml7bvvIzmsqHmnInml6XljobotbfmraLml7bpl7TjgILkuKTkuKrlt6XlhbfmtYHlvI/orrDlvZXljIXlkKsgVVRDIOi1t+atouaXtumXtO+8mgoKfCDorrDlvZUgfCBgc3RhcnRlZF9hdGAgfCBgZmluaXNoZWRfYXRgIHwg5YyX5Lqs5pe26Ze0IHwKfCAtLS0gfCAtLS0gfCAtLS0gfCAtLS0gfAp8IGBzdHJlYW1pbmctdG9vbC1hdHRlbXB0Lmpzb25gIHwgYDIwMjYtMDktMjVUMTU6MDI6MTQuOTQ4ODA1WmAgfCBgMjAyNi0wOS0yNVQxNTowMjoxOC4xMTMxMjlaYCB8IDIzOjAyOjE04oCUMjM6MDI6MTggfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYCB8IGAyMDI2LTA5LTI1VDE1OjAzOjI1LjYxOTg5MVpgIHwgYDIwMjYtMDktMjVUMTU6MDM6MjguNTQ0MTYwWmAgfCAyMzowMzoyNeKAlDIzOjAzOjI4IHwKCiMjIDIwMjYtMDktMjUg5p+l6K+i55qE5a6Y5pa55Lu35qC8CgpEZWVwU2VlayDlrpjmlrnkuK3mlofku7fmoLzpobXliJflh7ogYGRlZXBzZWVrLWZsYXNoYO+8jOWvueW6lOaooeWei+eJiOacrOS4uiBEZWVwU2Vlay1WNC4xLUZsYXNo44CC5q+P55m+5LiHIHRva2VuIOeahOS6uuawkeW4geWNleS7t+WmguS4i+OAgltEZWVwU2VlayDlrpjmlrnmqKHlnovkuI7ku7fmoLxdKGh0dHBzOi8vYXBpLWRvY3MuZGVlcHNlZWsuY29tL3poLWNuL3F1aWNrX3N0YXJ0L3ByaWNpbmcvKQoKfCDorqHku7fpobnnm64gfCDnqbrpl7Lml7bmrrUgfCDpq5jls7Dml7bmrrUgfAp8IC0tLSB8IC0tLTogfCAtLS06IHwKfCDnvJPlrZjlkb3kuK3ovpPlhaUgfCAwLjAyIOWFgyB8IDAuMDQg5YWDIHwKfCDnvJPlrZjmnKrlkb3kuK3ovpPlhaUgfCAxIOWFgyB8IDIg5YWDIHwKfCDovpPlh7ogfCA0IOWFgyB8IDgg5YWDIHwKCuWumOaWueWumuS5ieWMl+S6rOaXtumXtOWRqOS4gOiHs+WRqOS6lOeahCA5OjAw4oCUMTI6MDDjgIExNDowMOKAlDE4OjAwIOS4uumrmOWzsOaXtuaute+8jOS4reWbveazleWumuiKguWBh+aXpemZpOWklu+8m+WFtuS9meaXtumXtOS4uuepuumXsuaXtuauteOAguS4pOS4quW3peWFt+agt+acrOeahOW3suefpeaXtumXtOWxnuS6juepuumXsuaXtuaute+8m+WFtuS7liAxNiDmrKHosIPnlKjmjInkuKTnp43ml7bmrrXkvLDnrpfjgILotLnnlKjkvb/nlKjov5nmrKHmn6Xor6LliLDnmoTku7fmoLzvvIzlrp7pmYXmiaPotLnku43pnIDmoLjlr7nkvpvlupTllYbotKbljZXjgIIKCmBgYHRleHQK5pyq5ZG95Lit6L6T5YWlID0gaW5wdXRfdG9rZW5zIC0gaW5wdXRfdG9rZW5fZGV0YWlscy5jYWNoZV9yZWFkCuS8sOeul+i0ueeUqCA9ICjmnKrlkb3kuK3ovpPlhaUgw5cg5pyq5ZG95Lit5Y2V5Lu3CiAgICAgICAgICArIOe8k+WtmOWRveS4rei+k+WFpSDDlyDnvJPlrZjlkb3kuK3ljZXku7cKICAgICAgICAgICsgb3V0cHV0X3Rva2VucyDDlyDovpPlh7rljZXku7cpIC8gMTAwMDAwMApgYGAKCnwg6K6w5b2VIHwg6LS555So5Lyw566X5LiL6ZmQIHwg6LS555So5Lyw566X5LiK6ZmQIHwKfCAtLS0gfCAtLS06IHwgLS0tOiB8CnwgYGNvbGxhYm9yYXRpb24tbW9kZWwuanNvbmAgfCAwLjAwNjk1MzgwIOWFgyB8IDAuMDEzOTA3NjAg5YWDIHwKfCBgY29sbGFib3JhdGlvbi1kdXJhYmxlLmpzb25gIHwgMC4wMDQ5MTM3NiDlhYMgfCAwLjAwOTgyNzUyIOWFgyB8CnwgYGNvbGxhYm9yYXRpb24tY29udGV4dC5qc29uYCB8IDAuMDA2MzQ4Mjgg5YWDIHwgMC4wMTI2OTY1NiDlhYMgfAp8IOWNj+S9nOagt+acrOWQiOiuoSB8IDAuMDE4MjE1ODQg5YWDIHwgMC4wMzY0MzE2OCDlhYMgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCAwLjAwMTcyOTUyIOWFgyB8IDAuMDAzNDU5MDQg5YWDIHwKfCBgc3RyZWFtaW5nLXRvb2wtYXR0ZW1wdC5qc29uYO+8jOW3suefpeepuumXsuaXtuautSB8IDAuMDAxNTE4NzIg5YWDIHwgMC4wMDE1MTg3MiDlhYMgfAp8IGBzdHJlYW1pbmctdG9vbC1tb2RlbC5qc29uYO+8jOW3suefpeepuumXsuaXtuautSB8IDAuMDAxNTU4NzIg5YWDIHwgMC4wMDE1NTg3MiDlhYMgfAp8IOWFqOmDqOWQiOiuoSB8IDAuMDIzMDIyODAg5YWDIHwgMC4wNDI5NjgxNiDlhYMgfAoK5Lik5Liq5bel5YW35qC35pys5ZCI6K6h5Lyw566X6LS555So5Li6IDAuMDAzMDc3NDQg5YWD44CC5YW25L2Z6K6w5b2V55qE5Lik5YiX5YiG5Yir6YeH55So56m66Zey5LiO6auY5bOw5Y2V5Lu344CC5a6e6ZmF5omj6LS56L+Y6ZyA5LiO5L6b5bqU5ZWG6LSm5Y2V5Y+K5b2T5pe25Lu35qC85qC45a+577yM6LWg6YCB5L2Z6aKd5omj5YeP5Lmf5Lya5b2x5ZON5YWF5YC85L2Z6aKd5Y+Y5YyW44CCCgojIyDlj6/ku6XlpI3nrpfnmoQgUG93ZXJTaGVsbCDlkb3ku6QKCuWcqOivvuS7tumhueebrueahCBgcHJvamVjdC9gIOaVmeWtpuS7o+eggeebruW9leaJp+ihjOOAgui/meauteWRveS7pOWPquivu+WPluWbuuWumuWFreS4qiBKU09OIOaWh+S7tuW5tui/m+ihjCBEZWNpbWFsIOiuoeeul++8jOS4jeS6p+eUn+aooeWei+iwg+eUqOOAgui+k+WHuuWIhuWIq+WIl+WHuuS4pOenjeS7t+ebrumHkemine+8m+S4pOS4quW3peWFt+agt+acrOS9v+eUqCBgb2ZmX3BlYWtfY255YO+8jOWFtuS7luagt+acrOS/neeVmeS4pOaho+iMg+WbtOOAggoKYGBgcG93ZXJzaGVsbAokbmFtZXMgPSBAKAogICAgJ2NvbGxhYm9yYXRpb24tbW9kZWwnLCAnY29sbGFib3JhdGlvbi1kdXJhYmxlJywgJ2NvbGxhYm9yYXRpb24tY29udGV4dCcsCiAgICAnc3RyZWFtaW5nLW1vZGVsJywgJ3N0cmVhbWluZy10b29sLWF0dGVtcHQnLCAnc3RyZWFtaW5nLXRvb2wtbW9kZWwnCikKZm9yZWFjaCAoJG5hbWUgaW4gJG5hbWVzKSB7CiAgICAkcmVjb3JkID0gR2V0LUNvbnRlbnQgImRvY3MvY291cnNlL3ZlcmlmaWNhdGlvbi8kbmFtZS5qc29uIiAtUmF3IHwgQ29udmVydEZyb20tSnNvbgogICAgW2RlY2ltYWxdJGlucHV0VG9rZW5zID0gMAogICAgW2RlY2ltYWxdJG91dHB1dFRva2VucyA9IDAKICAgIFtkZWNpbWFsXSRjYWNoZWRUb2tlbnMgPSAwCiAgICBmb3JlYWNoICgkYXR0ZW1wdCBpbiAkcmVjb3JkLmF0dGVtcHRzKSB7CiAgICAgICAgJGlucHV0VG9rZW5zICs9ICRhdHRlbXB0LnVzYWdlLmlucHV0X3Rva2VucwogICAgICAgICRvdXRwdXRUb2tlbnMgKz0gJGF0dGVtcHQudXNhZ2Uub3V0cHV0X3Rva2VucwogICAgICAgICRjYWNoZWRUb2tlbnMgKz0gJGF0dGVtcHQudXNhZ2UuaW5wdXRfdG9rZW5fZGV0YWlscy5jYWNoZV9yZWFkCiAgICB9CiAgICAkbWlzc2VkVG9rZW5zID0gJGlucHV0VG9rZW5zIC0gJGNhY2hlZFRva2VucwogICAgJG9mZlBlYWsgPSAoJG1pc3NlZFRva2VucyArICRjYWNoZWRUb2tlbnMgKiBbZGVjaW1hbF0nMC4wMicgKyAkb3V0cHV0VG9rZW5zICogNCkgLyAxMDAwMDAwCiAgICBbcHNjdXN0b21vYmplY3RdQHsKICAgICAgICBzYW1wbGUgPSAkbmFtZQogICAgICAgIGF0dGVtcHRzID0gJHJlY29yZC5zdGFydGVkX2F0dGVtcHRzCiAgICAgICAgaW5wdXRfdG9rZW5zID0gJGlucHV0VG9rZW5zCiAgICAgICAgb3V0cHV0X3Rva2VucyA9ICRvdXRwdXRUb2tlbnMKICAgICAgICBjYWNoZV9yZWFkID0gJGNhY2hlZFRva2VucwogICAgICAgIGNhY2hlX21pc3MgPSAkbWlzc2VkVG9rZW5zCiAgICAgICAgb2ZmX3BlYWtfY255ID0gJG9mZlBlYWsKICAgICAgICBwZWFrX2NueSA9ICRvZmZQZWFrICogMgogICAgfQp9CmBgYAoKIyMg5Lia5Yqh6YeP5Lyw566X57uD5LmgCgrmnKznu4PkuaDlj6rph4fnlKjkuInkuKrljY/kvZzmoLfmnKznmoTlubPlnYflgLzjgILlgYforr7mnKrmnaXkuJrliqHkv53mjIHlhbbovpPlhaXjgIHovpPlh7rjgIHnvJPlrZjmr5TkvovkuI4gNSDmrKHmqKHlnovlsJ3or5XvvIwxMDAwIOS4quS4muWKoemihOiuoemcgOimgSA1MDAwIOasoeaooeWei+WwneivleOAgee6piA1MDE0NjY3IOS4qui+k+WFpSB0b2tlbuOAgTY3MjAwMCDkuKrovpPlh7ogdG9rZW7jgILovpPlhaXkuK3nuqYgMTY2NDAwMCDkuKogdG9rZW4g5ZG95Lit57yT5a2Y77yM57qmIDMzNTA2Njcg5LiqIHRva2VuIOacquWRveS4ree8k+WtmOOAguaMieeFp+acquWPluaVtOeahOW5s+Wdh+WAvOiuoeeul++8jOi0ueeUqOe6puS4uiA2LjA3MTk0NyDlhYPmiJYgMTIuMTQzODkzIOWFg+OAgua1geW8j+agt+acrOWxnuS6juWPpuS4gOenjeaJp+ihjOiMg+WbtO+8jOS4jeWKoOWFpei/mee7hOS4muWKoeW5s+Wdh+WAvOOAggoK5aaC5p6c5q+P5YiG6ZKf5Yiw6L6+IDMwIOS4quWQjOexu+S4muWKoe+8jOWImeacn+acm+iwg+eUqOmHj+S4uiAxNTAg5qyhL+WIhumSn++8jOaAuyB0b2tlbiDkuLogMTcwNjAwL+WIhumSn+OAgumineWkluWwneivleaVsOmHj+aMieato+W4uOiwg+eUqOeahCA1JSDkvLDnrpfml7bvvIzmnJ/mnJvosIPnlKjph4/kuLogMTU3LjUg5qyhL+WIhumSn++8jOaAuyB0b2tlbiDkuLogMTc5MTMwL+WIhumSn+OAguinhOWIkuivt+axguS4iumZkOaXtuW6lOWwhuasoeaVsOWQkeS4iuWPluaVtO+8jOW5tuWIhuWIq+ajgOafpeS+m+W6lOWVhuWvuei+k+WFpeOAgei+k+WHuuWSjOW5tuWPkeeahOWFt+S9k+mZkOWItuOAggoK5Lia5Yqh5Lyw566X6ZyA6KaB5L+d55WZ5Lul5LiL5YGH6K6+77ya5Lia5Yqh57G75Yir5q+U5L6L5LiN5Y+Y44CB6L6T5YWl6ZW/5bqm5YiG5biD5LiN5Y+Y44CB57yT5a2Y5ZG95Lit5q+U5L6L5LiN5Y+Y44CB5LiT5Lia6KeS6Imy5pWw6YeP5LiN5Y+Y44CB5rKh5pyJ5paw5aKe5pGY6KaB6LCD55So44CB5rKh5pyJ5paw5aKe5Lia5Yqh6YeN6K+V44CC55yf5a6e5rWB6YeP5Y+Y5YyW5ZCO6ZyA6KaB6YeN5paw6YeH5qC35ZKM6K6h566X44CC6aKE566X5omj5YeP44CB6YeN5aSN57uT566X44CB5p2D6ZmQ44CB5a6h5om55ZKM54i26L+Q6KGM57Sv6K6h5qyh5pWw5LiK6ZmQ5bqU57un57ut6YCa6L+H5a+55bqU55yf5a6e5pWw5o2u5bqT5rWL6K+V6aqM6K+B44CCCgojIyDmoLfmnKznu5PorrrkuI7mtYvph4/ojIPlm7QKCui/meS6m+agt+acrOWPr+S7peivtOaYjuS4gOasoeWNj+S9nOivt+axguWMheWQq+Wkmuasoeiuoei0ueiwg+eUqO+8jOW5tuWxleekuue8k+WtmOi+k+WFpeeahOeLrOeri+iuoeS7t+aWueazleOAguS4ieS7veagt+acrOeahOi+k+WHuumVv+W6puWSjOe8k+WtmOmHj+S4jeWQjO+8jOavj+S4qumYtuauteWPquacieS4gOS4quWNj+S9nOagt+acrO+8jOaXoOazleaNruatpOiuoeeul+aMgeS5heWMluWbuuWumuiAl+aXtuOAgeWkmiBBZ2VudCDliqDpgJ/mr5TjgIHkuIrkuIvmlofkvJjljJboioLnnIHmr5TkvovmiJbmlbTkvZPkuJrliqHlh4bnoa7njofjgIIKCuaAp+iDveWvueeFp+mcgOimgeWbuuWumuS4muWKoeaVsOaNruOAgXByb21wdOOAgeaooeWei+eJiOacrOOAgei+k+WHuumZkOWItuOAgei/nuaOpeWIneWni+eKtuaAgeWPiue8k+WtmOadoeS7tu+8m+WIhuWIq+iusOW9leS4k+S4muinkuiJsuOAgeS4u+aooeWei+WSjOW3peWFt+iwg+eUqOiAl+aXtuOAguiwg+eUqOasoeaVsOS4iumZkOOAgXRva2VuIOS4iumZkOOAgeacgOmVv+i/kOihjOaXtumXtOmcgOimgeWcqOaJp+ihjOWJjeWGmeWFpeiusOW9leOAguW9k+WJjeadkOaWmeWkjeeUqOW3suaciSAyMCDmrKHosIPnlKjvvIzotLnnlKjorqHnrpfov4fnqIvmlrDlop7mqKHlnovosIPnlKjmlbDph4/kuLogMOOAggoKIyMg5paH5Lu25oyH57q5Cgrku6XkuIsgU0hBMjU2IOWvueW6lOacrOadkOaWmeivu+WPlueahOWOn+Wni+iusOW9leOAguaWh+S7tuWGheWuueWPmOWMluaXtumcgOimgemHjeaWsOe7n+iuoe+8jOWQjOaXtuabtOaWsOacrOadkOaWmeS4reeahOmqjOivgeiMg+WbtOOAggoKfCDmlofku7YgfCBTSEEyNTYgfAp8IC0tLSB8IC0tLSB8CnwgYGNvbGxhYm9yYXRpb24tbW9kZWwuanNvbmAgfCBgNDFiYzAyOWYwMjkzYjVjOGVlMGExODdjMWI2N2QzYTIzZmM1ZTExMDg0ZmVmYWJmYzhkZGI1NTdjOGZlNjM0YWAgfAp8IGBjb2xsYWJvcmF0aW9uLWR1cmFibGUuanNvbmAgfCBgYjI5ZWE1ZWQ5Njk1NzJkNzU0ZDIyNWUzNTgyZTk5MWU2MDM0MmNlYTU0OTdkYmFlNjllNDkzZDY4MDExMTFlOWAgfAp8IGBjb2xsYWJvcmF0aW9uLWNvbnRleHQuanNvbmAgfCBgMGUxZTlhMDQ4Y2U0YjE1M2U2ZjcxMDIwYmI4NTAzODFhYjIwMjZiZjc1ZjFiNjQ5MWQxYzlkMzFjZmM4ZTk0Y2AgfAp8IGBzdHJlYW1pbmctbW9kZWwuanNvbmAgfCBgYjI4ZGJmMjMyMWRlZjdiODkxMTRjZGIxYmVlZmFhZDU1MTRiNjU0Nzk3ZmM1ODk3ZWY5MjA3NTNjYTY5N2I5ZmAgfAp8IGBzdHJlYW1pbmctdG9vbC1hdHRlbXB0Lmpzb25gIHwgYDg4NzU3YzU3NDM3NTlhZmFmZDlmZDAxZjQzMDFjNDMwZjI3OTg1MjAzMzU4YWRkNGYzNWY0MzI5Yzc5MWJmYjhgIHwKfCBgc3RyZWFtaW5nLXRvb2wtbW9kZWwuanNvbmAgfCBgNWY0M2E2OTViY2MyNGExZTkxOTg1ZDAxNWNlYWQwMjhlMzEwMWMyMjJjNGE1OWY1YTRmYTk1ZGEyYmJiYWNjY2AgfAo=">下载本文源文件 ↓</a></nav>
+    </main>
+  </div>
+  <div class="copy-status" role="status" aria-live="polite"></div>
+</body>
+</html>

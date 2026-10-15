@@ -1,0 +1,720 @@
+# 1.大模型LoRA微调
+
+- 第一章 微调这件事：从全量微调到 PEFT
+  - 1.1 大模型已经很强了，为什么还要微调
+    - 模型"会"不等于"稳定地按你的要求会"：固定 JSON 结构输出、行业黑话/话术腔调、分类/抽取/评分判断标准统一
+    - 风格、格式、判断标准靠提示词管一时管不了稳定
+    - 微调定义：利用特定领域的数据集对已预训练的大模型进一步训练，优化模型在特定任务上的性能
+  - 1.2 三条技术路线的分工
+    - 【结论】口诀：提示词解决临时要求，RAG 解决外部知识，微调解决稳定行为
+    - 新手坑：把"让模型知道公司最新产品价格"这类知识需求拿去微调，是 RAG 的活，知识还会过时
+  - 1.3 全量微调的三座大山
+    - 显存：训练时显存里同时放模型权重、梯度、优化器状态、中间激活值；7B 模型全量微调轻松吃掉 60GB 以上，24GB RTX 4090 塞不下
+    - 存储：每个任务模型是一份完整副本，7B 一份十几 GB，十个任务一百多 GB
+    - 风险：灾难性遗忘（新任务学好了老本行忘了）；数据质量差/学习率没调好容易"学歪"
+  - 1.4 PEFT：只动一小撮参数的聪明办法
+    - 共同思路：冻结原模型绝大部分参数，只训练一小撮参数或新增少量参数，以极低成本逼近全量微调效果
+    - 主流方法对比
+      - Adapter：Transformer 层里插入小型神经网络模块只训它；训练参数量少；引入额外推理延迟；用得少了
+      - Prompt Tuning：不碰模型，输入前加可训练"软提示"向量；极少；效果依赖模型规模，小模型偏弱；特定场景
+      - Prefix Tuning：Prompt Tuning 加强版，每一层都加可训练前缀；极少；比 Prompt Tuning 强一些；特定场景
+      - BitFit：只训练所有 bias 偏置项；极少；简单到极致效果有限；研究向
+      - IA³：用可学习缩放向量缩放激活值；极少；参数量最省；小众
+      - LoRA：冻结原权重，旁路训练两个低秩小矩阵；少；效果好、无推理延迟、生态成熟；绝对主流
+      - QLoRA：基座 4bit 量化 + LoRA；少；显存再砍一半以上，消费级显卡救星；主流
+    - 【结论】LoRA 赢的原因：效果能打（多数任务接近全量微调）、实现简单（线性层旁挂分支）、推理无额外开销（可合并回原权重）、生态极好（PEFT、TRL、LLaMA-Factory、Unsloth）
+- 第二章 数学地基：把"秩"这件事讲明白
+  - 2.1 秩：矩阵里"不重复的干货"有多少
+    - 教科书定义：矩阵的秩是线性无关行（或列）的最大数目；行秩永远等于列秩
+    - 人话：秩衡量矩阵里"真正不重复的信息"有多少
+    - 职场例子：5 个人的产出矩阵，实习生 A = 员工 1 × 系数，实习生 B 同理，秩 = 3
+    - 线性相关：队伍里有重复能力，至少一个人能被别人"组合"出来；线性无关：每个人都带来别人替代不了的新能力
+    - 【代码】线性无关示例 independent_cols = [[1,0],[0,1]]；线性相关 dependent_rows = [[1,2,3],[2,4,6],[0,0,0]]（第二行 = 第一行 × 2，零向量总是线性相关）
+  - 2.2 三个视角看秩
+    - 视角一 方程组视角：有效线索的数量
+      - 线索 A：身高 + 体重 = 240；线索 B：身高 - 体重 = 140；线索 C：2 × 身高 = 380；C = A + B，秩只有 2
+      - 方程的秩就是有效约束的个数；3 个未知数 2 个独立约束，解不唯一
+    - 视角二 空间视角：能"撑开"多大的空间
+      - 秩 = 2 的 3×3 矩阵列向量只能铺满一个平面；秩 = 1 全挤在一条线上
+    - 视角三 变换视角：信息压缩有多狠
+      - 满秩：3 维进 3 维出，信息无损，变换可逆；秩 = 2：3 维拍成 2 维影子；秩 = 1：压到一条线；秩 = 0（零矩阵）：信息全灭
+    - 【结论】一个矩阵的秩是线性独立行或列的最大数目，秩越大信息含量越大
+    - 【代码】秩为 1 示例 A = [[1,2,3],[2,4,6],[3,6,9]]；秩为 2 示例 B = [[1,0,2],[0,1,3],[1,1,5]]（第 3 行 = 第 1 行 + 第 2 行）
+  - 2.3 低秩分解：用两个小矩阵装下大矩阵
+    - 当矩阵秩 $r \ll \min(m,n)$ 时称为低秩矩阵
+    - 低秩矩阵里的信息可以用更少的东西装下
+    - 数值例子：512×512 矩阵有 262,144 个数；保留 r = 8，两个小矩阵共 $512 \times 8 + 8 \times 512 = 8{,}192$ 个数，压缩率 97%
+- 第三章 LoRA 原理深度拆解
+  - 3.1 核心公式，一行就够
+    - LoRA（Low-Rank Adaptation）：微软研究院 2021 年论文《LoRA: Low-Rank Adaptation of Large Language Models》
+    - 核心思想：在冻结的预训练模型权重旁添加小型可训练的低秩矩阵，显著降低微调的计算和内存需求，无需重新训练整个模型
+    - 核心公式：$W' = W + \Delta W = W + (\alpha / r) \cdot B \cdot A$
+      - W：预训练权重，d×d，冻结，一个字节都不改
+      - B：d×r 矩阵，可训练（升维矩阵）
+      - A：r×d 矩阵，可训练（降维矩阵）
+      - r：秩，远小于 d，一般取 4~64
+      - $\alpha / r$：缩放因子，控制 LoRA 分支的输出幅度，α 是超参数
+    - 前向传播：$h = Wx + (\alpha / r) \cdot BAx$；原路 Wx 保留老本事，旁路 BAx 学新任务增量
+    - 比方：全量微调是整栋楼拆了重装修；LoRA 是在关键位置加可调节装置，主体结构不动
+  - 3.2 参数账本：到底省了多少
+    - 注意力层一个权重矩阵 4096×4096
+      - 全量微调：$4096 \times 4096 = 16{,}777{,}216$ 个参数
+      - LoRA（r = 8）：B: $4096 \times 8 = 32{,}768$；A: $8 \times 4096 = 32{,}768$；合计 65,536
+      - $65{,}536 / 16{,}777{,}216 \approx 0.39\%$，训练参数量砍到 0.4%
+    - 【结论】整个模型（通常给注意力层 Q、V 投影挂 LoRA）可训练参数一般只占原模型 0.1% ~ 1%
+    - 显存四笔账对比（全量微调 vs LoRA）
+      - 权重内存：全量加载 vs 全量加载（省不掉，基座还得在）
+      - 梯度内存：所有参数都要存 vs 只给 A、B 存，≈ 减少 99%
+      - 优化器状态（Adam 一阶/二阶动量）：每个参数两份 vs 只给 A、B 存，≈ 减少 99%
+      - 激活值：大 vs 基本不变（和 batch、序列长度相关）
+    - 实测数据：7B 模型全量微调约 60GB 显存，LoRA 大概 23GB，单张 RTX 4090 能跑；配合 QLoRA 4bit 量化加载显存再砍一大截；吞吐提升接近一倍
+    - LoRA 核心思想补充：原有矩阵权重 W 微调过程中拆解成两个低秩矩阵 A、B 的乘积，冻结原有矩阵 + 两个低秩矩阵乘积适应新任务
+    - 【结论】目前主流微调方式是 LoRA，训练速度非常快节省资源，但训练结果很多时候不稳定有玄学，因为依赖反向更新，有时候没更新到相关知识点导致幻觉，需要多次尝试
+    - LoRA 主要特点和优势
+      - 参数高效：典型场景可训练参数减少 10-100 倍（取决于原模型尺寸和 r 值）
+      - 训练速度快：更新参数大幅减少
+      - 存储空间小：LoRA 适配器通常只有几十到几百 MB，完整模型几十 GB
+      - 推理性能优化：权重可在推理前合并回原模型，不增加推理开销
+      - 可组合性：多个 LoRA 适配器可合并或按不同比例混合
+      - 质量保持：许多任务中性能与全参数微调相当甚至更好，减少过拟合风险
+  - 3.3 初始化的玄机：为什么 A 随机、B 置零
+    - 【结论】LoRA 论文初始化方案：A 用小的随机高斯值初始化，B 初始化为全零矩阵
+    - 起步时 $B \cdot A = 0$，旁路输出为零，模型与原始预训练模型逐比特一致，LoRA 分支从零平滑"长"出能力
+    - 作死方案一 A、B 都置零：ΔW 永远是 0，损失对 B 的梯度正比于 A、对 A 的梯度正比于 B，俩都是零梯度也是零，互相锁死（梯度消失死局）
+    - 作死方案二 A、B 都随机初始化：初始 B·A 是不小的随机矩阵，模型还没训练先被"打了一拳"，收敛变慢甚至翻车
+    - A 随机提供对称性破缺让梯度流动，B 置零保证起点干净；A 用正态分布小初始值保证训练初期梯度稳定传播不消失不爆炸
+  - 3.4 训练全流程
+    - 训练完成后两种用法
+      - 合并权重（Merge）：$W_{new} = W + (\alpha / r) \cdot BA$，合并后模型结构、参数量、推理速度和原模型完全一样，零额外延迟；上线部署用这种
+      - 保持分离（Adapter 模式）：LoRA 权重单独存成小文件（几 MB 到几百 MB），推理时动态加载；一个基座挂 N 个 LoRA（客服/法务/写代码）几秒热切换；多任务场景用这种
+  - 3.5 LoRA 加在哪些层：好钢用在刀刃上
+    - Transformer 每层两类密集权重矩阵
+      - 注意力层：Q、K、V、O 四个投影矩阵；Wq 决定"关注什么"，Wk 决定"被检索的特征"，Wv 决定"取出什么内容"，Wo 把多头结果拼回隐藏维度
+      - 前馈层（FFN）：升维、降维两个线性层，负责非线性特征加工
+    - LoRA 原论文核心实验结论
+      - 【结论】预算有限时，同时适配 Wq 和 Wv 性价比最高，能逼近全量微调效果；Q 影响"问什么问题"，V 影响"给出什么内容"
+      - 【结论】小秩就够：r 开到 4、8 已能捕捉任务主要变化方向，再加大 r 并没有覆盖更多有意义的子空间
+      - 【结论】给更多矩阵挂 LoRA，常常比把单一矩阵的 r 调大更划算
+    - 【代码】target_modules 实操建议（Hugging Face PEFT 模块命名）
+      - 经济型（默认选择，多数任务够用）：target_modules = ["q_proj", "v_proj"]
+      - 标准型（四个注意力矩阵全挂）：target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+      - 豪华型（连 FFN 一起，Qwen/DeepSeek 的 FFN 命名）：target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    - 【结论】嵌入层参数量大但变动小冻结最划算；LayerNorm 参数少直接更新也不心疼；bias 学得快不需要 LoRA 辅助；默认都别碰
+  - 3.6 LoRA 的边界：什么时候它不灵
+    - 低秩假设失效时：目标任务和预训练数据差异极大（纯文本模型学全新形式语言），权重变化可能是高秩的，老实全量微调
+    - 想注入大量新知识时：LoRA 擅长调"行为"（格式、风格、判断标准），不擅长灌"知识"；知识需求找 RAG
+    - r 和 target_modules 要调：没有放之四海皆准的最优值，在评测集上试
+    - 数据不行神仙难救：LoRA 只降训练参数量，不修复数据噪声、标注冲突、任务定义不清；微调玄学八成追溯到数据问题
+- 第四章 工程实战：从数据到部署
+  - 4.1 工具链怎么选
+    - LLaMA-Factory：一站式微调框架，有 WebUI，百种模型开箱即用；适合想快速出活、不想写代码的人
+    - Hugging Face PEFT：官方库，代码最灵活；适合想掌控每个细节的工程师
+    - Unsloth：深度优化训练加速库，优化内核和手动反向传播引擎实现 2 倍训练速度提升，内存占用比传统微调减少 70%-80%；适合显存紧张想榨干显卡的人
+    - 三家都成熟支持 QLoRA/LoRA 和 DeepSeek/Qwen 全系；Unsloth 手写 Triton 内核把训练速度再提 30%~70%，缺点是对模型架构有适配清单
+  - 4.2 数据：质量永远大于数量
+    - LoRA 微调是用一批高质量、目标明确的样本把模型往要的方向轻轻推；几百条精品数据经常吊打几万条脏数据
+    - 好数据六个标准
+      - 任务目标单一：训投诉分类就全是投诉分类
+      - 输入贴近真实：真实用户有口语、错别字、省略
+      - 输出格式统一：同类输入的输出结构、字段、详略一致
+      - 答案互不冲突：同一问题不能这条标 A 那条标 B
+      - 要有边界样本：模糊输入、异常输入、该拒答的输入都得教
+      - 留好验证集/测试集：没有测试集的微调等于闭眼开车
+    - 两种主流数据格式
+      - Alpaca 格式（单轮指令，LLaMA-Factory 默认友好）：instruction / input / output 三字段
+      - ShareGPT / messages 格式（多轮对话，聊天模型常用）：messages 列表，role 为 user / assistant，content
+    - 【结论】铁律：训练时的对话模板和推理时必须一致，chat template 对不上效果直接打折
+  - 4.3 手写训练代码
+    - 数据集：FreedomIntelligence/medical-o1-reasoning-SFT（zh_mix）；模型：ModelScope deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    - 【代码】LoRA 完整代码流程（按课件步骤顺序）
+      - 步骤 1 导入：from transformers import AutoTokenizer, AutoModelForCausalLM（因果模型/自回归模型）, DataCollatorForLanguageModeling（数据整理器）, Trainer, TrainingArguments；from datasets import load_dataset
+      - 步骤 2 设置路径：model_name="/root/autodl-tmp/code/model"；finetuned_model_path="/root/autodl-tmp/code/fined"
+      - 步骤 3 加载模型与 tokenizer：AutoModelForCausalLM.from_pretrained(model_name, local_files_only=True)；AutoTokenizer.from_pretrained(model_name)
+      - 步骤 4 数据预处理 preprocess_function（标准 SFT 处理：只训练 assistant 回答部分、正确处理截断和 EOS、保持 chat template）
+        - max_length = 1024；对 examples["Question"], examples["Complex_CoT"], examples["Response"] 构建 messages（system / user / assistant，assistant content 为 f"<think>\n{cot}\n</think>\n{response}"）
+        - Step 1 生成完整对话：tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+        - Step 2 生成 prompt 部分（不含 assistant 回复）：prompt_messages = messages[:-1]；apply_chat_template(..., add_generation_prompt=True)
+        - Step 3 Tokenize：tokenizer.encode(full_text, add_special_tokens=False, max_length=max_length, padding="max_length", truncation=True)；prompt_ids 同理
+        - Step 4 处理截断（保留 EOS）：若 len(full_ids) > max_length，截到 max_length-1 再 append(tokenizer.eos_token_id)
+        - Step 5 构建 labels（关键）：labels = [-100] * prompt_len + full_ids[prompt_len:]，prompt 部分 -100 不计算 loss，assistant 部分保留；labels = labels[:len(full_ids)]
+        - 返回 {"input_ids", "attention_mask"（全 1）, "labels"}
+      - 步骤 5 加载数据集：load_dataset("json", data_files={"train": ".../train.json", "valid": ".../validation.json"})；dataset.map(preprocess_function, batched=True)
+      - 步骤 6 LoRA 配置：from peft import LoraConfig, get_peft_model, TaskType；LoraConfig(r=8（低秩矩阵的秩）, lora_alpha=16（缩放 LoRA 权重更新的超参数）, target_modules=['self_attn.q_proj','self_attn.k_proj','self_attn.v_proj','self_attn.o_proj'], lora_dropout=0.05, bias='none', task_type=TaskType.CAUSAL_LM)
+      - 步骤 7 获取 PEFT 模型：model = get_peft_model(model, lora_config)；model.config.use_cache = False
+      - 步骤 8 统计可训练参数：遍历 model.named_parameters()，param.numel() 累加 all_params，param.requires_grad 为真累加 trainable_params，打印占比
+      - 步骤 9 model.enable_input_require_grads()（开启梯度检查点时要执行）
+      - 步骤 10 训练参数 TrainingArguments(output_dir=finetuned_model_path, label_names=["labels"], overwrite_output_dir=True, num_train_epochs=20, per_device_train_batch_size=6, per_device_eval_batch_size=6, save_steps=10, save_total_limit=5, prediction_loss_only=True, report_to="tensorboard", logging_dir="./logs", save_strategy="epoch", gradient_accumulation_steps=16, gradient_checkpointing=True)
+        - gradient_accumulation_steps：多个小批量梯度累积后一次性更新，累积步数到达预设值时更新并清零；节省内存、模拟大批量训练、提高训练稳定性
+        - gradient_checkpointing：只存储部分激活值，反向传播时重新计算其他激活值，减少内存占用
+      - 步骤 11 数据整理器：DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)（标准语言模型任务）
+      - 步骤 12 创建训练器：Trainer(model=model, args=training_args, data_collator=data_collator, train_dataset=dataset["train"], eval_dataset=dataset["valid"])
+      - 步骤 13 开始训练：trainer.train()
+      - 步骤 14 合并权重：from peft import PeftModel；加载基座 AutoModelForCausalLM.from_pretrained(model_name, local_files_only=True)；model = PeftModel.from_pretrained(model, "/root/autodl-tmp/fined/checkpoint-2250")；model = model.merge_and_unload()；model.save_pretrained("/root/autodl-tmp/merge")
+      - 步骤 15 微调后效果验证：from transformers import TextStreamer；加载 "/root/autodl-tmp/merge"；prompt_style 模板（任务描述 / 问题 / 回答 <think>{}）；tokenizer([prompt_style.format(question, "")], return_tensors="pt")；fined_model.generate(**inputs, streamer=TextStreamer(tokenizer), max_new_tokens=2048)
+  - 4.4 超参数调优的实用心法
+    - 【结论】先用保守参数跑通：r=8 或 16，α=2r，lr=2e-4，3 个 epoch，q_proj+v_proj；先证明流程通、数据没格式错误
+    - 【结论】小数据配小秩：<5K 样本 r=8 起步；>50K 样本再考虑 r=32+；数据少秩大是过拟合套餐
+    - 【结论】复杂任务组合拳：加大 r 到 32/64 + 开 rsLoRA + 挂载模块扩到 FFN，三件套一起上
+    - 【结论】给更多层挂 LoRA 往往比给单一层加大 r 更值
+    - 【结论】学习率别贪大：LoRA 常用 1e-4 ~ 3e-4，超过 5e-4 很容易训得说胡话
+  - 4.5 评测：别只盯着 loss 看
+    - loss 下降只说明模型在"背"训练数据
+    - 三组对比：裸基座模型（微调有没有用）、基座 + 精心写的提示词（打不过好提示词则微调价值存疑）、LoRA 微调后的模型（最终选手）
+    - 评测维度：分类任务算准确率/F1；生成任务人工评分或强模型（如 DeepSeek-V3）辅助打分；业务任务建固定 Bad Case 集每轮原样重测
+    - 重点看：格式稳定性、风格一致性、边界输入表现、幻觉控制
+  - 4.6 常见坑清单
+    - 以为数据越多越好：低质量数据越多模型越乱，小而准 > 大而脏
+    - 目标定得太抽象："让模型懂法律"不是目标，"按《合同法》第 X 条格式输出审查意见"才是
+    - 拿知识库需求去微调：知识会过时，用 RAG
+    - 没有测试集：无法证明模型变好
+    - 训练/推理模板不一致：chat template 对不上效果莫名其妙地差
+    - epoch 贪多：第 3 轮以后多半是过拟合表演时间
+    - LoRA 训练结果"玄学"：本质是反向传播没更新到相关知识点或数据有冲突；先查数据，再调参数，最后才考虑换方案
+
+# 2.大模型低精度训练与量化实战指南
+
+- 第 1 章 大模型显存账本：训练与推理资源估算指南
+  - 为什么显存总是不够用
+    - 大模型训练痛点两个：算力和显存；算力可堆卡堆时间硬扛，显存是硬约束（消费级显卡至今在 24GB 徘徊）
+    - 反直觉事实：7B 模型权重文件 14GB 上下，但全参数训练 16GB 卡想都别想，80GB 一张都不够
+  - 显存四要素：钱到底花在哪
+    - 模型权重：参数量 × 精度字节数；FP32 是 4 字节，BF16/FP16 是 2 字节
+    - 梯度：同权重，反向传播每个参数都要存一份梯度
+    - 优化器状态：参数量 × 8 字节（AdamW），动量 + 方差，都是 FP32
+    - 前向激活值：看 batch、序列长度、隐层维度；反向传播要用只能先存着
+  - 内存需求估算公式
+    - 训练时的总内存（粗略估算）：$总内存 = (参数内存 + 梯度内存 + 优化器内存 + 激活内存) \times 安全系数$
+      - 参数内存 = 参数数量 × 每参数字节数（如 FP16 为 2 字节）
+      - 梯度内存与参数内存相同
+      - 优化器内存：Adam 每个参数存动量和方差共 8 字节/参数；$总优化器内存 = 参数数量 \times 8 字节$
+      - 激活内存依赖 batch size 和序列长度；Transformer 估算：$激活内存 \approx 批量大小 \times 序列长度 \times 隐藏层维度 \times 层数 \times 10$
+      - 安全系数通常 1.2-1.5，预留缓存和通信开销
+    - 推理时的总内存：$总内存 \approx 参数内存 + 激活内存$；激活内存通常远小于训练时（无需存梯度）
+    - AdamW 给每个参数配两个 FP32"随从"（一阶动量 m 和二阶方差 v），8 字节/参数，比 BF16 权重本身贵 4 倍；"优化器才是显存大头"
+    - 混合精度训练时的完整账本
+      - 混合精度训练：训练过程中同时使用低精度（FP16、BF16）和高精度（FP32）进行计算
+      - 主流做法：前向/反向用 BF16 提速，参数更新用 FP32 保稳定
+      - 【结论】混合精度 + AdamW 训练一个参数约 16 字节显存，再算激活值和安全余量经验值是 18~20 倍参数字节
+      - 7B 模型静态部分 $7 \times 16 = 112\text{GB}$，80GB 单卡 hold 不住
+  - 速算公式与案例 A：全参微调 Qwen2.5-7B
+    - $训练总显存 \approx (权重 + 梯度 + 优化器状态 + 激活值) \times 安全系数$
+    - $推理总显存 \approx 权重 + KV\ Cache + 少量激活$
+    - 安全系数一般取 1.2~1.5，留给框架开销、显存碎片和通信缓冲；PyTorch 显存碎片能凭空丢掉好几个 GB
+    - 案例：全参数微调 Qwen2.5-7B（BF16 混合精度 + AdamW）
+      - BF16 权重：7B × 2 字节 = 14 GB
+      - BF16 梯度：7B × 2 字节 = 14 GB
+      - FP32 主权重：7B × 4 字节 = 28 GB
+      - AdamW 状态：7B × 8 字节 = 56 GB
+      - 激活值（开梯度检查点）：估 16 GB
+      - 小计 128 GB；× 安全系数 1.25 ≈ 160 GB
+    - 【结论】单卡 80GB（A100/H100）塞不下，需要 2×80GB 或 4×40GB；只有 24GB 4090 全参训练别想了
+  - GPU 数量规划
+    - 单卡内存需求：A100 有 40GB/80GB 版本；总需求 200GB 单卡 40GB 至少 5 块（200/40=5）
+    - 并行策略调整：模型参数量过大需模型并行拆分到多 GPU；70B 的 LLaMA-2 无法放入单卡，需张量并行（如 8 卡）
+    - 卡数就是道除法
+    - 【结论】张量并行尽量限制在单机内（NVLink 带宽才扛得住），跨机优先流水线并行 + 数据并行
+    - 【结论】估算结果向上取整再留一档余量
+  - 训练时长怎么估
+    - $总计算量（FLOPs）\approx 6 \times 参数量 \times 训练\ token\ 数$
+    - $训练时长 = 总计算量 \div (卡数 \times 单卡算力 \times MFU)$
+    - 系数 6 来历：前向每参数每 token 约 2 次浮点运算（一乘一加），反向约为其 2 倍即 4 次，合计 6；开激活重计算（梯度检查点）再加 2 用系数 8
+    - MFU（算力利用率）经验取 0.4~0.5；A100 的 BF16 峰值算力约 312 TFLOPS
+    - 案例：7B 模型、2000 亿 tokens、8×A100（MFU=0.45）
+      - 总算力 = $8 \times 312T \times 0.45 \approx 1.12\ \text{PFLOPS}$
+      - 下界（系数 6）= $6 \times 7e9 \times 2e11 = 8.4e21$ FLOPs → ≈ 2077 小时 ≈ 87 天
+      - 实际（系数 8）= $8 \times 7e9 \times 2e11 = 1.12e22$ FLOPs → ≈ 2770 小时 ≈ 115 天
+      - 单机 8 卡差不多 4 个月；想快就加卡或把数据砍到合理规模
+    - 【结论】token 数估算经验法则：中文约 1 字 1 token，英文约 4 字符 1 token；严谨点抽一批语料真实 tokenize 算比例
+  - 懒人工具
+    - gpu_poor（rahulschand.github.io/gpu_poor）：网页版显存计算器
+    - DeepSpeed 的显存估算脚本：多卡 ZeRO 场景专用
+    - 实在懒得算：参数量 × 精度字节数 × 1.2 先拍个下界
+  - 小结
+    - 【结论】训练显存 = 权重 + 梯度 + 优化器 + 激活，混合精度 + AdamW 下约 16~20 倍参数字节
+    - 【结论】推理显存 ≈ 权重 + KV Cache，约 2~3 倍参数字节
+    - 【结论】装不下三条路：省（低精度/量化）、换（梯度检查点，时间换空间）、摊（ZeRO/并行）
+    - 【结论】训练时长 = 6~8 × 参数量 × token 数 ÷ 有效算力
+- 第 2 章 低精度数据类型详解：从 FP32 到 FP8
+  - 精度即显存
+    - 1B = 10 亿参数，8 bit = 1 Byte
+    - FP32：32 bit，4 Bytes；8B 模型权重 32 GB；72B 模型 288 GB
+    - FP16 / BF16：16 bit，2 Bytes；8B 为 16 GB；72B 为 144 GB
+    - FP8 / INT8：8 bit，1 Byte；8B 为 8 GB；72B 为 72 GB
+    - INT4 / NF4：4 bit，0.5 Byte；8B 为 4 GB；72B 为 36 GB
+    - 参数量不变，每参数字节数砍下来显存等比例砍下来；剩下问题是精度砍了模型还准吗
+  - 浮点数的三段式结构
+    - IEEE 754：$数值 = (-1)^{符号位} \times 2^{(指数位 - 偏移量)} \times (1 + 尾数位)$
+    - 符号位（S）1 位正负号；指数位（E）决定动态范围；尾数位（M）决定精度
+    - 四种主流格式位分配
+      - FP32：符号 1，指数 8，尾数 23，总 32，动态范围约 $\pm 3.4 \times 10^{38}$
+      - FP16：符号 1，指数 5，尾数 10，总 16，动态范围 ±65504
+      - BF16：符号 1，指数 8，尾数 7，总 16，动态范围约 $\pm 3.4 \times 10^{38}$
+      - FP8 (E4M3)：符号 1，指数 4，尾数 3，总 8，±448
+      - FP8 (E5M2)：符号 1，指数 5，尾数 2，总 8，±57344
+    - 【结论】16 bit 预算下指数和尾数是零和博弈：FP16 选择精度（尾数 10 位）牺牲范围（指数 5 位）；BF16 选择范围（指数 8 位与 FP32 看齐）牺牲精度（尾数 7 位）
+  - 逐个拆解
+    - FP32：老大哥
+      - 单精度 1+8+23；深度学习早期默认格式；如今退居二线但没下岗：混合精度训练的主权重副本、优化器状态仍是 FP32
+    - FP16：精度优先的偏科生
+      - 半精度 1+5+10；显存减半、计算提速（Tensor Core 硬件加速）
+      - 上溢出：结果超过 65504 直接变 inf；np.float16(65504) + np.float16(32) → inf
+      - 下溢出：梯度小于约 $6 \times 10^{-5}$（FP16 最小正规格化数）时被舍入成 0，参数不更新，"梯度消失"字面版
+      - 远离 0 的地方刻度越来越稀，大数间隔能到几十，舍入误差放大
+      - FP16 数轴：±65504 之外上溢出舍入到 ±INF，0 附近 $\pm 2^{-24}$ 之内下溢出舍入到 0，近 0 端密集远 0 端稀疏
+    - BF16：范围优先的务实派
+      - Google 为机器学习量身定制 1+8+7；指数位与 FP32 一样多，动态范围与 FP32 完全一致；FP16 会爆的 65504 对 BF16 连热身都不算；代价尾数只有 7 位
+      - 0.1 在三种格式下的表示：FP32 0.10000000149 误差 ≈ 1.5e-9；FP16 0.09997558594 误差 ≈ 2.4e-5；BF16 0.10009765625 误差 ≈ 9.8e-5（误差是 FP16 的 4 倍）
+      - π 在 FP16 和 BF16 下都是 3.140625 误差一样，是尾数低位恰好为 0 的巧合，换 0.1 就现原形
+      - 深度学习权重和梯度天然对"范围"敏感、对"精度"容忍：梯度小到 $10^{-6}$，激活值偶尔冲到几千；FP16 要么下溢要么上溢，BF16 全程无感；梯度缩放技巧在 BF16 下可省掉
+      - 【结论】BF16 是当前大模型训练的事实标准（Qwen、DeepSeek 官方权重默认 BF16），FP16 更多出现在推理侧
+    - FP8：新王登基
+      - NVIDIA 从 H100（Hopper 架构）开始硬件支持
+      - E4M3（4 指数 + 3 尾数）：精度高一点，范围 ±448，适合权重和激活
+      - E5M2（5 指数 + 2 尾数）：范围宽一点，±57344，适合梯度
+      - DeepSeek-V3：全球首个公开披露用 FP8 混合精度完成超大规模训练的开源模型；前向/反向矩阵乘用 E4M3，梯度相关用 E5M2，配合精细分块缩放
+      - 对硬件（H100 及以上 / 新一代国产算力卡）和框架有要求，目前不是家家都能玩
+  - 混合精度训练：我全都要
+    - 【结论】计算用 BF16 图快，存储和更新用 FP32 图稳
+    - 用 FP16 跑混合精度需额外"梯度缩放"（loss 先乘大系数防梯度下溢，更新前再除回去）；BF16 基本不需要
+  - 实战：半精度加载模型
+    - 【代码】方式一（不推荐）：model = AutoModelForCausalLM.from_pretrained(model_name)；model = model.half()（FP32 -> FP16）；加载峰值按 FP32 算 32GB 内存先吃满
+    - 【代码】方式二（推荐）：AutoModelForCausalLM.from_pretrained(model_name, local_files_only=True, dtype=torch.bfloat16（Transformers 4.56+ 新参数名，旧版 torch_dtype=torch.bfloat16）, device_map="auto")
+    - 【代码】验证：print(next(model.parameters()).dtype) 期望 torch.bfloat16；model.get_memory_footprint() / 1024**3（需 pip install accelerate）
+    - 7B 模型：FP32 约 28GB -> BF16 约 14GB
+    - 【结论】无脑选 torch.bfloat16（前提 Ampere 架构以后 N 卡，即 30 系/A100 及更新；国产算力卡普遍原生支持 BF16）；老卡（V100、20 系）不支持 BF16 才退而用 torch.float16
+    - dtype 控制的是计算精度；训练时 FP32 主权重副本由 Trainer 自动维护
+    - 纯推理场景可加 low_cpu_mem_usage=True 压低加载内存峰值
+  - 精度选择决策（图）
+  - 小结
+    - 浮点数 = 符号 + 指数（管范围）+ 尾数（管精度），位宽固定时两者互相挤占
+    - FP16 偏科精度范围只有 ±65504，训练里容易上溢/下溢；BF16 范围与 FP32 持平，牺牲尾数换稳定，成训练标配
+    - FP8（E4M3/E5M2）在 H100 级硬件上落地，DeepSeek-V3 已趟出大规模训练完整路径
+    - 混合精度 = BF16 计算 + FP32 更新；加载时一句 dtype=torch.bfloat16 享受一半显存
+- 第 3 章 INT8 量化实战：从手算 absmax 到 LLM.int8()
+  - 什么是量化
+    - 定义：把一个数值空间的数映射到另一个更小的数值空间；FP32 浮点数塞进只有 256 个刻度的 INT8 空间（-128~127），存储和传输成本立省 75%
+    - 收益：显存/内存成本 FP32 > FP16 > INT8 权重体积等比缩水；计算成本整数矩阵乘比浮点快更省电（显存带宽受限的推理场景收益最明显）
+    - 代价：量化误差，关键是控制在模型"感觉不到"的范围内
+  - 线性量化（absmax）：先徒手算一遍
+    - 核心思路：找向量里绝对值最大的数对应 INT8 满刻度 127，其余按比例缩放后四舍五入
+    - 手算例子：$x = [0.83, -1.27, 2.56, -3.18]$
+      - 第 1 步 找锚点：$x_{absmax} = 3.18$
+      - 第 2 步 算缩放：$scale\_factor = 127 / 3.18 \approx 39.94$
+      - 第 3 步 量化：$q_x = round(x \times 39.94) = round([33.15, -50.72, 102.24, -127.0]) = [33, -51, 102, -127]$
+      - 反量化：$x' = q_x / 39.94 = [0.826, -1.277, 2.554, -3.18]$；误差 $|x - x'| = [0.004, 0.007, 0.006, 0]$
+    - 存储时只需记住：整数数组 q_x（4 字节）+ 缩放因子 scale（1 个 FP32）
+    - 【代码】absmax_quantize(x)：absmax = np.abs(x).max()；scale = 127.0 / absmax；q = np.round(x * scale).astype(np.int8)；返回 q, scale
+    - 【代码】absmax_dequantize(q, scale)：q.astype(np.float32) / scale
+    - 对称量化好处：0 始终精确映射到 0（神经网络的 0 很多）
+  - 量化误差：真正的麻烦制造者
+    - 离群值例子：$x = [35, 38, 42, 280]$；$scale = 127 / 280 \approx 0.4536$；$q_x = round([15.88, 17.24, 19.05, 127]) = [16, 17, 19, 127]$；反量化 = [35.28, 37.48, 41.89, 280]
+    - 离群值（outlier）问题：一个超出分布的大值把 scale 撑大，其余正常值挤到少数几个刻度，误差剧增
+    - Transformer 隐层激活中总有少数维度比其他高几十倍（论文叫 emergent features），误差逐层累积模型性能崩
+  - LLM.int8()：离群值走 VIP 通道
+    - 三个关键动作
+      - 分解：从输入隐状态按列提取离群值（大于阈值的维度），拆成"离群小矩阵"和"正常大矩阵"
+      - 分治：正常部分走 Vector-wise INT8 矩阵乘（省显存主力），离群部分走 FP16 高精度矩阵乘（保精度）
+      - 合并：INT8 路径结果反量化后与 FP16 路径结果相加，得最终 FP16 输出
+    - 【结论】13B 以内模型 INT8 推理精度与 FP16 基本持平，显存直接减半；离群值只占 0.1% 左右计算量
+  - 实战：bitsandbytes 8bit 加载
+    - 【代码】uv pip install -U bitsandbytes；AutoModelForCausalLM.from_pretrained(model_name, local_files_only=True, load_in_8bit=True（核心开关，以 INT8 加载全部线性层权重）, device_map="auto"（8bit 量化主要支持 CUDA）)
+    - 【代码】model.get_memory_footprint()；7B 模型 BF16 约 14GB -> INT8 约 7~8GB（多出来的是 scale 和未量化层）
+    - 【代码】推理用法与原模型零区别：tokenizer(..., return_tensors="pt").to(model.device)；model.generate(**inputs, max_new_tokens=64)；tokenizer.decode(outputs[0], skip_special_tokens=True)
+    - 底层：load_in_8bit=True 把 nn.Linear 替换成 bitsandbytes 的 Linear8bitLt，权重以 INT8 + 每行/列 scale 存储（LLM.int8() 同款）
+    - 前向传播动态反量化做矩阵乘，输出仍是 FP16/BF16
+    - 【结论】Embedding 层、LayerNorm 和 lm_head 通常不量化（对精度敏感且占比小），所有量化方案通行做法
+    - 【代码】llm_int8_threshold=6.0 调离群值阈值；llm_int8_has_fp16_weight=False 等控制细节，一般默认即可
+  - INT8 的边界
+    - 【结论】适用：7B~70B 推理部署，显存减半、精度损失通常 1% 以内；vLLM/SGLang 对 INT8 支持成熟（配合 llm-compressor 对 Qwen 系列做权重离线量化）
+    - 【结论】不适用：训练/微调主战场（梯度对精度更敏感，8bit 训练仍属前沿）；1bit/2bit 极限压缩
+- 第 4 章 4bit 量化与 QLoRA 实战：NF4、双重量化与分页优化器
+  - QLoRA 定义：在 LoRA 基础上引入量化技术进一步压缩模型权重和梯度，大幅降低显存，更大的模型可在消费级 GPU 微调；QLoRA = 量化(int4) + LoRA
+  - INT4 的困境：16 个刻度怎么够用
+    - INT4 只有 4 位，16 个刻度（有符号 -8~7）
+    - absmax 线性量化手算：$x = [0.42, 0.75, -0.95, 2.71]$
+      - $x_{absmax} = 2.71$；$scale = 7 / 2.71 \approx 2.583$（正刻度只有 7 个）
+      - $q_x = round(x \times 2.583) = [1, 2, -2, 7]$；反量化 = [0.387, 0.774, -0.774, 2.71]
+      - 误差 = [0.033, 0.024, 0.176, 0]；-0.95 被拉成 -0.774，误差 18%
+    - 8bit 时代 127 个正刻度，4bit 只剩 7 个；线性量化是等距切分，不在乎数据分布；真实模型权重不是均匀分布
+  - 关键洞察：权重是"中间胖、两头瘦"的
+    - LLaMA2 和 ChatGLM3 权重直方图近似标准正态分布：绝大多数值挤在均值附近，越往两头越稀
+    - 线性量化把 16 个刻度均匀撒在数轴上，中间刻度不够用两头浪费（按经度均匀分配高铁站的比喻）
+    - 思路：目标域（刻度）没法改，改切分方式——在源域（数据分布）上按"人数"均分，每个刻度服务同样多参数，即分位数量化
+  - NF4：为正态分布量身定做的 16 个值
+    - 4bit 16 个刻度找 15 个分位数切成 16 块，每块参数数量严格相等
+    - 分位数量化完整流程
+      - 计算分位数：量化成 N 个离散值就算 N-1 个分位点
+      - 划分区间：相邻分位点构成区间，数据落第几号区间量化值就是几
+      - 确定反量化值：每个区间配一个浮点代表值（通常取区间两侧分位点均值），反量化查表还原
+    - NF4（NormalFloat 4bit）：权重近似标准正态分布，直接用 N(0,1) 的分位数当量化点
+    - NF4 的 16 个量化值（归一化到 [-1, 1]）：[-1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0, 0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.7230, 1.0]
+    - 手算：$x = [0.42, 0.75, -0.95, 2.71]$
+      - 第 1 步 块内归一化：$x_{absmax} = 2.71$；$x_{norm} = x / 2.71 = [0.1550, 0.2768, -0.3506, 1.0]$
+      - 第 2 步 最近邻匹配 NF4 量化点：0.1550 -> 0.1609（索引 9）；0.2768 -> 0.2461（索引 10）；-0.3506 -> -0.3949（索引 3）；1.0 -> 1.0（索引 15）；存储 q = [9, 10, 3, 15]，每个只占 4 bit
+      - 第 3 步 反量化（查表 × absmax）：$x' = [0.436, 0.667, -1.070, 2.71]$
+    - 单个向量看不出优势（NF4 平均误差 0.055，线性 4bit 0.058）；NF4 复利体现在亿级参数 × 正态分布，整体累计误差被系统性压低
+    - 工程细节
+      - 分块量化（block size = 64）：每 64 个参数独立算一个 absmax 再归一化；块内离群值只祸害这 64 个数
+      - 0 有精确表示：NF4 的 16 个值包含精确的 0.0，对稀疏梯度/权重友好
+  - 双重量化：连 scale 也不放过
+    - 每 64 个参数配一个 FP32 absmax 量化常数：每参数额外 $32/64 = 0.5$ bit，相当于"4.5bit 量化"，7B 模型多付约 0.4GB
+    - 双重量化（Double Quantization）：把第一层量化的 absmax 常数每 256 个一组再做一次 8bit 量化（配一个 FP32 二级 scale）
+    - 双重量化前：$32 / 64 = 0.5$ bit/参数；双重量化后：$8 / 64 + 32 / (64 \times 256) \approx 0.127$ bit/参数
+    - 每参数省 0.373 bit，7B 模型再省约 0.3GB；24GB 卡上往往是 OOM 与不 OOM 的距离
+  - 分页优化器：给显存装个"虚拟内存"
+    - 显存峰值：梯度同步、checkpoint 保存瞬间显存突然冲顶，平时够用偏偏那 1 秒 OOM
+    - 分页优化器（Paged Optimizer）借操作系统虚拟内存思想：优化器状态平时放 CPU 内存，GPU 显存不够自动换出，需要更新再换入，对训练代码透明
+  - QLoRA 全景：三件套合体
+    - QLoRA = 4bit NF4 冻结基座 + BF16 LoRA 适配器 + 双重量化 + 分页优化器
+    - 三种微调范式对比
+      - 基座模型：全参数 BF16 参与训练；LoRA BF16 冻结；QLoRA 4bit NF4 冻结
+      - 训练对象：全部参数；低秩适配器（<1%）；低秩适配器（<1%）
+      - 优化器状态：覆盖全部参数（巨大）；只覆盖适配器；只覆盖适配器，可分页到 CPU
+      - 7B 微调显存：≈ 160GB；≈ 20GB+；≈ 10~12GB
+      - 精度：基准；几乎无损；与 LoRA 基本持平
+  - 实战：24GB 卡上微调 7B 模型
+    - 【代码】QLoRA 完整代码流程（按课件步骤顺序）
+      - 安装：pip install -U bitsandbytes peft transformers；import torch；from transformers import AutoModelForCausalLM, BitsAndBytesConfig；from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+      - 第 1 步 配置 4bit 量化：BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4"（备选 "fp4" 一般不如 nf4）, bnb_4bit_compute_dtype=torch.bfloat16（计算时反量化成 BF16 再做矩阵乘，"存储 4bit 计算 16bit"）, bnb_4bit_use_double_quant=True（双重量化再省 0.3GB 左右）)
+      - 第 2 步 4bit 加载基座：AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", local_files_only=True, quantization_config=bnb_config, device_map="auto")；基座显存 7B 约 3.7GB
+      - 第 3 步 为 kbit 训练做准备：model = prepare_model_for_kbit_training(model)（冻结基座参数、LayerNorm/lm_head 转 FP32 保稳定、开启梯度检查点）
+      - 第 4 步 挂上 LoRA 适配器：LoraConfig(r=16, lora_alpha=32（实际缩放 = alpha/r = 2 倍）, target_modules=["q_proj","k_proj","v_proj","o_proj"（注意力四件套）, "gate_proj","up_proj","down_proj"（MLP 三件套，挂上效果更好）], lora_dropout=0.05, bias="none", task_type="CAUSAL_LM")；model = get_peft_model(model, lora_config)；model.print_trainable_parameters()
+      - 可训练参数：trainable params ≈ 40M || all params ≈ 7.6B || trainable% ≈ 0.5%
+      - 之后接入 Trainer 正常训练；如需分页优化器，TrainingArguments 里指定 optim="paged_adamw_32bit"
+    - 【结论】整套装进 24GB 4090 毫无压力，16GB 卡咬牙也能上（batch 开小、序列截短）
+    - QLoRA 论文在 65B 模型上证明：4bit 微调效果可追平 BF16 全参数微调的 99%
+  - 小结与系列回顾
+    - 4bit 线性量化死于刻度太少 + 等距切分，救星是分位数量化：按数据分布均分刻度
+    - NF4 用标准正态分布分位数当量化点，中间密两头疏，与权重分布天然对齐；配合 64 参数分块隔离离群值
+    - 双重量化把量化常数再量化一次，每参数开销 0.5bit 降到 0.127bit
+    - 分页优化器用 CPU 内存削平显存峰值
+    - QLoRA = 冻结 4bit 基座 + BF16 LoRA，消费级显卡微调 7B 成为日常
+    - 四章技术线：先会算账（显存账本）→ 理解数据类型（FP32→FP8）→ 工程化省显存（INT8）→ 极致压缩还能训练（4bit QLoRA）
+
+# 3.大模型分布式训练实战指南
+
+- 一、为什么单卡撑不住了
+  - 1.1 两座大山：显存和算力
+    - 分布式：把又大又重的任务拆成若干份交给多台机器（或多张卡）协同完成；大模型时代从"可选项"变"必选项"
+    - 第一座山 显存效率：DeepSeek-V3 MoE 总参数 671B，推理都要多张卡；Adam 每个参数背后跟一阶动量、二阶动量两份状态
+    - 10B 参数模型 FP32 训练显存估算
+      - 模型参数：40 GB（4 字节 × 10B）
+      - 梯度：40 GB（与参数同尺寸）
+      - 优化器状态（Adam）：80 GB（m、v 各一份 FP32）
+      - 合计约 160 GB，还没算激活值；一张 80G 的 A100/H800 装不下
+    - 第二座山 计算效率：GPT-3 规模单卡跑完需数十年，唯一出路把计算摊开让成百上千张卡一起算
+  - 1.2 单卡场景下的自救手段
+    - 路线一 减少可训练参数量 PEFT：LoRA / QLoRA 在权重矩阵旁挂一对低秩矩阵只训练这对小矩阵，社区事实标准
+    - 路线二 降低参数精度 量化训练：bitsandbytes 把权重压到 INT8 甚至 NF4（4bit）；QLoRA 是"4bit 基座 + LoRA"，24G 消费卡可微调 7B 国产模型（Qwen2.5-7B）
+  - 1.3 自救手段的天花板
+    - PEFT 解决的是"微调"的显存问题，底座模型本身还得完整加载进显存
+    - 量化省显存但损失精度，对"预训练"场景基本无能为力——预训练必须全参数、全精度更新
+    - 【结论】面对"从头训练"或"全参数微调一个装不下的大模型"，分布式训练是唯一答案
+- 二、分布式训练的三种并行范式
+  - 核心问题只有一个：怎么切
+  - 2.1 数据并行（DP）：复制模型，切分数据
+    - 每张 GPU 持有一份完整模型副本，吃不同数据；batch 均分到各卡，各算各的梯度，汇总平均统一更新，保证副本一致
+    - 前提：每张卡都得能独立跑完整个训练流程；模型装不下单卡这条路封死
+  - 2.2 流水线并行（PP）：按层切模型
+    - 模型按层切开，GPU 0 放前几层，GPU 1 放后几层，数据像流水线产品依次经过各卡；任何一张卡不再需要装下完整模型
+  - 2.3 张量并行（TP）：切开每一层
+    - 把同一层内部权重矩阵按行或按列剁开，每卡只存一块碎片各自做矩阵乘，再通过集合通信拼回去
+    - "显存换通信"：显存压力大幅下降，代价是 GPU 间高频数据交换，对互联带宽（NVLink）要求极高
+  - 2.4 怎么选？以及 3D 并行
+    - 【结论】经验法则：装得下就 DP，装不下就切模型（PP/TP），超大模型三样一起上
+    - 万卡级训练（DeepSeek-V3、Qwen 预训练）几乎清一色 3D 并行 = DP + PP + TP
+    - 【结论】编排：TP 通信最频繁放节点内部（同机多卡走 NVLink）；PP 通信量最小（只在 stage 边界传激活值）适合跨节点；DP 包在最外层把 TP+PP 拼好的"超级模型"复制多份摊大数据吞吐
+- 三、数据并行实战
+  - 3.1 PyTorch DataParallel 的工作流程
+    - PyTorch 最早官方多卡方案 nn.DataParallel（DP），完整训练循环分八步（图）
+  - 3.2 DP 的三个坑
+    - 坑一 device_ids 的物理卡与逻辑卡映射：DP 要求模型参数先落在 device_ids[0]；0 号物理卡被占想用 2、3 号卡，直接写 device_ids=[2, 3] 报初始化错误
+      - 【代码】程序最开头（import torch 之前）设置 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"（按 PCI 总线顺序枚举设备保证编号稳定）；os.environ["CUDA_VISIBLE_DEVICES"] = "2, 3"（只暴露物理 2、3 号卡，程序里 cuda:0 就是物理 2 号卡）
+      - 【代码】device_ids = [0, 1]（逻辑编号，对应物理卡 2 和 3）；net = torch.nn.DataParallel(net, device_ids=device_ids)
+    - 坑二 主卡显存畸高：Loss 计算、梯度汇总全压在主卡，batch 开大主卡先 OOM
+    - 坑三 快不起来甚至更慢：DP 是单进程多线程实现被 Python GIL 锁死；每个 step 重新广播模型，模型一大同步开销吃掉多卡收益
+  - 3.3 懒得手写？Hugging Face Trainer
+    - 【代码】HF Trainer 自动探测可用 GPU 数量，通过 accelerate launch 或 torchrun 启动即可多卡训练，基本零改造
+- 四、模型并行：流水并行与张量并行
+  - 4.1 流水线并行（PP）与 Bubble 问题
+    - PP 按层切成若干 stage 每卡负责一段；朴素实现 GPU 0 算前向时后面的卡干等，反向反过来，空闲时间叫 Bubble（气泡）
+    - 降气泡三板斧
+      - 增加微批次（micro-batch）数量：大 batch 切成更多小份流水推进，微批次越多气泡占比越低，最有效手段
+      - 均衡切分 stage：每段计算量相等，避免某段成瓶颈
+      - 改进调度：GPipe 的微批次调度、PipeDream 的异步权重更新；Megatron-LM 的 interleaved 1F1B 调度能把气泡压到很小
+  - 4.2 张量并行（TP）：显存换通信
+    - TP 针对"某一层本身太大"；以 FFN 层为例权重矩阵 W 按列切：GPU 0 持有 W[:, :half]，GPU 1 持有 W[:, half:]；同一份输入 X 广播给两卡各算 X · W_i 得半个输出；最后 All-Reduce（或 Concat）拼出完整结果
+    - Attention 层同理：多头注意力天然适合切，每张卡负责一部分 head
+    - 收益：单层显存占用 ÷ TP 卡数，千亿模型推理的标配手段
+    - 代价：每一层前向、反向都要跨卡通信，频率远高于 PP
+    - 【结论】TP 组必须放在 NVLink 互联的同机卡之间，跨机跑 TP 基本等于自杀
+  - 4.3 TP vs PP 速查
+    - 切分粒度：TP 层内（切权重矩阵）；PP 层间（按层分段）
+    - 通信频率：TP 极高（每层都通信）；PP 低（仅 stage 边界）
+    - 带宽要求：TP 必须 NVLink 级；PP 普通 IB/RoCE 即可跨机
+    - 解决的问题：TP 单层太大放不下；PP 整个模型太大放不下
+    - 代表框架：TP Megatron-LM；PP GPipe / PipeDream
+- 五、DeepSpeed 与 ZeRO：显存优化的终极武器
+  - 5.1 DeepSpeed 是什么
+    - 微软开源的深度学习优化库，通过分布式训练、混合精度训练、梯度累积和 ZeRO 优化器等显著减少训练时间和内存占用，使训练数十亿甚至数万亿参数模型成为可能
+    - 基于 PyTorch，大多数项目不用大改就能接入；BLOOM-176B、MT-NLG-530B 都是它训出来的
+    - 软件栈三层；【结论】一句话记忆：API 是入口，Runtime 是大脑，Ops 是肌肉；日常只跟 API 层打交道——一份 JSON 配置加一行 initialize
+  - 5.2 ZeRO：把冗余的显存找回来
+    - ZeRO（Zero Redundancy Optimizer，零冗余优化器）：DeepSpeed 核心技术，通过分片（partitioning）把模型训练占用的内存分布到多个设备上，减少单设备内存压力
+    - 传统数据并行的浪费：每张卡完整存一份参数、梯度和优化器状态，N 张卡 N 份冗余；ZeRO 切开摊到所有卡上，谁用谁取
+    - ZeRO 的背景与挑战
+      - 内存占用三来源：模型参数（权重）、梯度（反向传播计算）、优化器状态（Adam 的动量和方差）
+      - 10 亿参数模型：模型参数 4 GB（FP32）、梯度 4 GB（FP32）、优化器状态 8 GB（Adam）；总内存超过 16 GB，单 GPU 通常 16 GB 或 32 GB
+    - ZeRO 的分阶段优化
+      - ZeRO-1 优化器状态分片：优化器状态（Adam 动量和方差）分布到多 GPU，每 GPU 只存一部分；通常节省 4 倍内存
+      - ZeRO-2 梯度分片：梯度分布到多 GPU，每 GPU 只存一部分；在 ZeRO-1 基础上通常节省 8 倍内存
+      - ZeRO-3 模型参数分片：模型参数分布到多 GPU，每 GPU 只存一部分；在 ZeRO-2 基础上节省与 GPU 数量成比例的内存
+    - ZeRO 的工作原理（简化流程）
+      - 分片：优化器状态、梯度和模型参数分片到多 GPU，每 GPU 只存一部分数据
+      - 前向传播：每 GPU 用本地参数计算，需要其他 GPU 参数时通过通信获取
+      - 反向传播：计算梯度后将梯度分片存储到各 GPU
+      - 参数更新：每 GPU 只更新本地存储的优化器状态和模型参数
+      - 通信：需要时 GPU 之间通过高效通信机制（如 All-Reduce）同步数据
+    - ZeRO 的优势：内存效率（显著减少单 GPU 内存）、扩展性（支持万亿参数模型）、兼容性（与 PyTorch 无缝集成）、灵活性（支持 Adam、SGD 等优化器和混合精度训练）
+    - ZeRO 各阶段单卡显存对比
+      - Baseline（普通 DP）：啥都不分，120 GB；人手一套完整教材
+      - ZeRO-1：优化器状态，31.4 GB（≈4 倍↓）；作业答案分散给小组成员保管
+      - ZeRO-2：优化器状态 + 梯度，16.6 GB（≈8 倍↓）；连草稿纸也分开存
+      - ZeRO-3：优化器状态 + 梯度 + 参数，1.9 GB（随卡数线性↓）；教材也撕开分，用到哪页跟谁借
+    - ZeRO-3 代价：通信量约为普通 DP 的 1.5 倍，前向反向时需临时从别的卡拉参数分片
+    - 两级扩展
+      - ZeRO-Offload：优化器状态和梯度卸载到 CPU 内存，单卡可训练 10 倍于显存的模型
+      - ZeRO-Infinity：进一步卸载到 NVMe 固态硬盘，突破 GPU+CPU 内存总和限制
+  - 5.3 实战：用 DeepSpeed 全参数微调 DeepSeek
+    - 场景：2 张 GPU LoRA 微调 deepseek-ai/DeepSeek-R1-Distill-Qwen-7B；参考 HF transformers deepspeed 文档
+    - 【代码】第一步 安装：pip install transformers[deepspeed]
+    - 【代码】第二步 写配置文件 ds_config.json（DeepSpeed 的灵魂）
+      - "bf16": {"enabled": "auto"}
+      - "zero_optimization": {"stage": 3, "overlap_comm": true, "contiguous_gradients": true, "reduce_bucket_size": "auto", "stage3_prefetch_bucket_size": "auto", "stage3_param_persistence_threshold": "auto", "stage3_gather_16bit_weights_on_model_save": true, "offload_optimizer": {"device": "cpu", "pin_memory": true}, "offload_param": {"device": "cpu", "pin_memory": true}}
+      - "gradient_clipping": "auto"；"train_micro_batch_size_per_gpu": "auto"；"train_batch_size": "auto"；"gradient_accumulation_steps": "auto"
+  - 5.5 在 TrainingArguments 里配置 DeepSpeed
+    - 训练脚本本来是 HF Trainer 写的，接入 DeepSpeed 不需要 Accelerate，不用自己调 deepspeed.initialize；TrainingArguments 原生提供 deepspeed 参数，Trainer 内部完成初始化
+    - 【代码】核心用法：TrainingArguments(output_dir="./output", deepspeed="./ds_config.json"（也可直接传 dict）, per_device_train_batch_size=8（对应 train_micro_batch_size_per_gpu）, gradient_accumulation_steps=2（对应 gradient_accumulation_steps）, learning_rate=2e-5（对应 optimizer.params.lr）, num_train_epochs=3, bf16=True（对应 bf16.enabled）, logging_steps=10, save_strategy="epoch")
+    - 【代码】Trainer(model=model（普通 HF 模型不需要包装）, args=training_args, train_dataset=train_dataset)；trainer.train()（内部自动 deepspeed.initialize）
+    - ds_config.json 善用 "auto"：batch 相关参数、优化器、学习率调度若两边写死不同数值会对不上甚至静默覆盖；让 DeepSpeed 配置项填 "auto"，主动权交给 TrainingArguments
+    - 【结论】规则一句话：凡是被 Trainer 管理的参数，ds_config 里就写 "auto"；只有 ZeRO 相关和 DeepSpeed 独有的开关（如 overlap_comm、offload）才在 json 里写死
+    - 【代码】启动方式：deepspeed --num_gpus=4 train_trainer.py
+- 6、LLaMA Factory
+  - 文档链接：llamafactory.readthedocs.io 安装页；GitHub hiyouga/LlamaFactory
+
+# 4.大模型微调数据集完全指南
+
+- 一、训练数据的底层逻辑：规模、质量与多样性
+  - 扎心事实：微调翻车第一反应调参（lr 从 1e-5 改到 5e-5、LoRA rank 8 加到 64、epoch 3 加到 10），最后发现问题在数据
+  - 【结论】调参决定模型学习的「效率」，数据决定模型学习的「内容」；教材错了老师再会教也没用
+  - 1.1 数据规模：模型越大，饭量越大
+    - DeepMind Chinchilla 论文：训练 400 多个模型，参数量几千万到上百亿，数据量几亿到几千亿 tokens
+    - 【结论】模型参数量和训练数据量应该等比例增长；参数翻倍数据也得翻倍，否则算力空转
+    - 对比：1370 亿参数 LaMDA 只用 3000 亿 tokens；700 亿参数 Chinchilla 吃 1.4 万亿 tokens（参数减半数据翻 8 倍）反超 GPT-3、Gopher
+    - 开源模型训练数据量
+      - LLaMA-1：7B，超 1 万亿 tokens
+      - LLaMA-2：7B~70B，2 万亿 tokens
+      - LLaMA-3：8B~405B，15 万亿 tokens
+      - Qwen2.5：72B，18 万亿 tokens
+    - 微调数据量行业共识
+      - 【结论】轻量级指令微调（领域表达风格和高频知识点）：几千到几万条高质量样本就能看到明显效果
+      - 【结论】通用能力提升（推理、代码硬能力）：通常几十万到上百万条才能在评测上拉开差距
+      - 【结论】一万条精洗过的数据，胜过十万条噪声数据
+  - 1.2 数据质量：脏数据的破坏力超乎想象
+    - 干净 vs 脏：DeepMind Gopher 对比，严格过滤去重后的 MassiveWeb 在摘要、预测类任务明显优于未处理的 C4 和 OpenWebText；Google GLaM 确认高质量数据对生成能力影响尤其显著
+    - 重复数据的毒性：仅 0.1% 数据重复 100 次（其余 90% 不变），模型性能掉到接近"参数量小一半"的水平
+    - 死记硬背：PaLM 测试只出现 1 次的样本被记住概率约 0.75%，出现 500 次以上记忆率飙到 40% 以上
+    - 时效性：Google 对比不同年份 C4 快照，训练与测试数据年代差越大表现越差
+  - 1.3 数据多样性：别让模型「偏科」
+    - LLaMA 训练数据混合网页、代码、论文、书籍，按质量和重要性设置不同采样权重
+    - Gopher 配比实验：固定 Wikipedia（2%）和 GitHub（3%），在网页、新闻、书籍、C4 之间试 7 种配比，最佳 MassiveWeb 50% + Books 30% + C4 10% + News 10%；增加书籍数据后长文本逻辑（Lambada 测试）提升明显
+  - 1.4 训练集 / 验证集 / 测试集：别把答案泄露给考生
+    - 训练集：日常练习题，模型学习规律的核心资料；覆盖各种场景变体
+    - 验证集：模拟考卷，训练中阶段性检验，选 checkpoint、调超参；发现过拟合就调整
+    - 测试集：期末绝密试卷，训练结束后评估真实水平；绝对隔离，训练全程不得出现
+    - 完整集：三者原始合集；划分时保证分布一致
+    - 【结论】常规场景：70% 训练 + 15% 验证 + 15% 测试；小数据场景：80% 训练 + 10% 验证 + 10% 测试
+    - 为什么不能混用：测试集泄进训练集等于考前发答案，评测分虚高上线露馅
+    - 数据不够：交叉验证（完整集切 5 份，轮流 4 份训练 1 份验证）；同义改写、句式变换做数据增强
+    - 时序数据特例：必须按时间顺序切分不能随机打散（2024 年之前训练、2025 年测试），随机切等于让模型「偷看未来」
+- 二、微调数据集的分类与任务场景
+  - 全景：预训练模型 → 多模态微调 / 文本模型微调；文本模型微调 → 监督微调 SFT（指令微调、对话微调、领域适配、文本分类、推理微调 CoT）/ 其他微调（无监督/自监督、强化学习微调）/ 特殊微调（知识蒸馏）
+  - 【结论】普通开发者垂直行业微调 90% 场景落在监督微调（SFT）；强化学习微调和知识蒸馏只做概念性了解
+  - 2.0 预训练和微调的数据为什么不一样
+    - 预训练从零教模型「说话」，吃海量非结构化文本（网页、书籍、代码），无需人工标注
+    - 监督微调每条数据明确告诉模型「问题是什么，标准答案长什么样」
+    - 【结论】预训练阶段喂的是「原文」，微调阶段喂的是「问答」
+  - 2.1 指令监督微调（Instruction Tuning）
+    - 通过让模型学习详细指令及对应回答，优化模型在特定指令下的表现
+    - 三元组：instruction（人类指令）、input（人类输入）、output（模型回答）；例：翻译中文到英文
+    - instruction 和 input 分开的原因：同一输入任务不同答案不同（「Hello, how are you?」翻译成法语 vs 日语）
+    - 典型业务场景：智能教育（作业辅导）、智能办公（文档/邮件处理）、数据分析（按指令解读报表）
+    - 典型开源数据集：shibing624/alpaca-zh（Alpaca 中文增强版，约 5.2 万条）
+    - 最好造：任务明确答案客观，有现成物料（翻译 API、题库+答案），工作量在格式转换
+  - 2.2 对话微调（Dialogue Tuning）
+    - 用多轮对话数据训练连贯、符合语境的回复，核心是理解对话历史里的上下文、指代和角色关系
+    - 格式：dialogue 列表，role 为 user / assistant；例：空气炸锅指示灯不亮，第二轮的「它」需从上下文推断指代
+    - 典型业务场景：智能客服、AI 陪伴、语音助手
+    - 典型开源数据集：guanaco-sharegpt-style
+  - 2.3 领域适配（Domain Adaptation）
+    - 预训练模型在医疗、法律、金融垂直领域术语覆盖不足、专业规则不熟；在特定领域数据上微调补短板
+    - 格式：instruction / input / output + domain 字段（医疗：急性心肌梗死 STEMI；法律：《民法典》第 1032 条隐私权）
+    - 核心特征：领域术语标注（医学本体库、法律术语库）、复杂规则建模（药物相互作用、合同条款逻辑）、场景化数据增强（模拟问诊、合同审查流程）
+    - 典型开源数据集：qiaojin/PubMedQA
+    - 【结论】领域数据集是五类里最难造的；先去 HuggingFace、ModelScope 检索现成的；没有则人工/专家标注（慢但准）或 AI 辅助生成（快但必须人工二次确认）；AI 生成的领域数据未经校验直接训练等于跟着胡说八道的老师学
+  - 2.4 文本分类（Text Classification）
+    - 结构：text + label（positive / negative / finance_news）
+    - 典型业务场景：情感分析、内容审核、新闻分类、意图识别
+    - 典型开源数据集：stanfordnlp/imdb（电影评论情感二分类）
+    - 标注可借助 LabelStudio 第三方平台
+  - 2.5 推理微调（CoT）
+    - SFT 特殊形式：数据里显式标注思维链（Chain of Thought），训练模型给出分步推导过程；DeepSeek-R1 的 <think>...</think> 就是这个
+    - 格式：instruction / input / chain_of_thought（列表）/ output；例：铅笔 3×2=6 元，笔记本 5×6=30 元，合计 36 元
+    - 反直觉提醒：不是所有任务都适合推理模型，推理模型幻觉偏大，简单任务容易「想太多」；检索、解释类任务找不到依据会硬编
+    - 适合推理微调的场景：代码生成与调试、数学问题求解、复杂数据分析、法律与金融分析
+    - CoT 数据三条来源
+      - 现成数据集自带解题过程：AI-MO/NuminaMath-CoT（约 86 万道数学题，含中国高中练习题和国际奥赛题）
+      - 从推理模型蒸馏：OpenAI o1/o3 藏思维链，DeepSeek-R1 完全开源开放思考过程，市面带思维链开源数据集很多从 R1 蒸馏
+      - 引导非推理模型产出思考过程（第五章工具支持）
+- 三、数据集格式详解：Alpaca 与 ShareGPT
+  - 【结论】训练框架对数据集没有强制的格式要求；进训练器前都经过「格式化」工序把字段拼成文本，格式差异在代码里被抹平
+  - 3.1 格式化的真相：一切皆可 Prompt 模板
+    - 【代码】train_prompt_style 模板（电商售后客服场景）：三个 {} 对应用户问题、思考过程（<思考>{}</思考>）、最终回复
+    - 【代码】formatting_prompts_func(examples)：取 examples["Question"] / ["Complex_CoT"] / ["Response"]，逐条 train_prompt_style.format(input, cot, output) + EOS_TOKEN，返回 {"text": texts}
+    - EOS_TOKEN 是结束标记，缺少它模型可能学不到「什么时候该停止输出」
+    - 【代码】dataset = dataset.map(formatting_prompts_func, batched=True)（batched=True 按批处理比逐条快）
+    - 【代码】SFTTrainer(model=model, tokenizer=tokenizer, train_dataset=dataset, dataset_text_field="text"（读哪个字段做训练）, max_seq_length=max_seq_length, packing=False（打包能提速但可能损伤样本边界，效果优先时关掉）, args=TrainingArguments(per_device_train_batch_size=2, gradient_accumulation_steps=4（等效批量 = 2×4 = 8）))
+    - 【结论】无论原始数据是 Alpaca、ShareGPT 还是自定义三字段，最终归一化成一段文本；选格式是工程约定问题，选社区主流格式是为了和现成工具链兼容
+  - 3.2 Alpaca 格式：单轮任务的通用解
+    - 源自斯坦福 2023 年指令微调数据集，JSON 结构被社区抽象成通用格式
+    - 字段：instruction（人类指令，必填）、input（人类输入，选填）、output（模型回答，必填）、system（系统提示词，选填）、history（[["第一轮指令","第一轮回答"]]，选填）
+    - 实际案例：医疗症状诊断（instruction / input / output / system / domain）
+    - 特点：结构扁平字段直白，单轮任务一把梭；多轮对话手动往 history 里拼
+  - 3.3 ShareGPT 格式：为多轮与工具调用而生
+    - 核心是 conversations 列表，角色交替出现
+    - 角色标签：human（用户）、gpt（模型）、function_call（工具调用）、observation（工具返回）
+    - 【结论】消息顺序规则：human 或 observation 在奇数位，gpt 或 function_call 在偶数位
+    - 带工具调用例子：human「帮我计算 1024 × 36」→ function_call "calculator:1|operation=multiply|a=1024|b=36" → observation "36864" → gpt 回答；外加 system 与 tools 字段
+    - function_call 是模型调用外部工具的「桥梁指令」，Agent 类应用的数据基础
+    - 偏好数据集（RLHF/DPO 用）：conversations + chosen（优选答案）+ rejected（劣选答案）；模型学的是「哪种答法更好」
+  - 3.4 两种格式怎么选
+    - 对话历史：Alpaca 用 history 字段手动拼接；ShareGPT conversations 列表自然体现
+    - 角色逻辑：Alpaca 仅区分指令与输出无显式角色标签；ShareGPT 多种角色标签 + 强制奇偶位置规则
+    - 工具调用：Alpaca 不原生支持需在 input 隐式描述；ShareGPT function_call + observation 显式支持
+    - 典型场景：Alpaca 指令响应、领域问答、单轮结构化生成；ShareGPT 多轮对话、客服系统、需实时数据查询的交互
+    - 优势/短板：Alpaca 结构简洁任务导向清晰但多轮要手动拼 history；ShareGPT 支持复杂对话流与工具扩展但结构复杂构造成本高
+    - 【结论】单轮任务用 Alpaca，多轮/工具调用用 ShareGPT，偏好对齐用 chosen/rejected
+- 四、高质量 SFT 数据集构建方法论
+  - 【结论】数据处理（文档 → 问答对）+ 数据验证与优化（问答对 → 高质量问答对），两个阶段缺一不可
+  - 流程：原始资料 → 数据获取 → 数据清洗 → 数据标注/生成 → 质量校验 → 合格？否则回清洗 → 格式转换导出 → 微调训练 → 上线收集反馈 → 小步快跑迭代 → 回清洗
+  - 4.1 三个先想清楚的原则
+    - 对齐业务目标：电商客服聚焦订单查询、售后退换、物流跟踪；金融客服误塞股票分析数据，用户问信用卡还款模型讲 K 线
+    - 质量优先于数量：50 万条公开对话数据准确率 60%，换 5 万条业务高度匹配的精洗数据准确率 85%
+    - 覆盖全场景 + 风格统一：既要「礼貌咨询」也要「愤怒投诉」；回复风格一致，否则模型精神分裂
+  - 4.2 数据从哪来：三类渠道
+    - 公开数据集（快，但要筛）
+      - HuggingFace：NLP/多模态，英文为主，datasets 库即装即用、版本控制，需科学上网
+      - ModelScope（阿里）：中文 AI 应用，模型-数据协同，国内直连
+      - OpenDataLab（上海 AI 实验室）：中文场景，本土最大开源数据平台，CLI/SDK 下载，国内直连
+      - Kaggle：通用型多语言，竞赛生态、API 批量下载，需科学上网
+      - Google Dataset Search：跨平台检索，元数据聚合搜索，需科学上网
+      - awesome-public-datasets：学术研究中英文，领域细分索引（更新放缓）
+      - 【代码】from datasets import load_dataset；dataset = load_dataset("glue", "mrpc")
+      - 【代码】from modelscope.msdatasets import MsDataset；ds = MsDataset.load('modelscope/chinese-poetry-collection')
+      - 【结论】License 红线：cc-by-nc-4.0 这类带 NC（非商用）标记的，公司内部业务训练绝对不能用，自己学习研究没问题
+    - 私有数据（和业务最贴，但要脱敏）
+      - 来源：客服历史对话、内部知识库、产品手册、FAQ、业务日志
+      - 必须做：脱敏（手机号、身份证、地址抹掉）；剔除无效内容（「你好」「在吗」寒暄、发表情没下文），只留「提问+有效回复」完整片段
+    - 合成数据（量大管饱，但必须校验）
+      - 让基础大模型批量生成（例：100 条服装退换货对话，覆盖尺码不合适、质量问题、超退换期，回复符合 7 天无理由）
+      - 隐患：模型一本正经编造规则（公司政策 15 天它写 7 天）
+      - 【结论】合成数据必须人工对照业务规则逐条校验，核心场景建议 100% 人工过一遍
+  - 4.3 数据清洗三步法
+    - 去重：先用工具删完全重复，再人工抽查语义重复（「查物流」和「怎么看我的物流信息」）；重复让模型误以为这类问题特别重要
+    - 去噪：删乱码、特殊符号、广告链接、误发内部备注；修正逻辑错误（「退款 24 小时到账」vs 知识库「3 个工作日」）；错别字也要管
+    - 格式统一：对话数据统一固定角色格式；大段文档拆成「问题 + 短答案」（会员规则拆成「会员有哪几种？」「升级金卡需要消费多少？」）
+  - 4.4 数据标注：标准是生命线
+    - 明确标注维度：意图分类（订单查询/售后投诉/产品咨询）、回复质量评分（1~5 分）、业务规则匹配（符合/不符合）
+    - 选对工具：中小团队 LabelStudio 足够；大批量分批标注，每批抽 10%~20% 质检
+    - 控制一致性：先写标注手册（每个标签的定义、边界、正反例），标注前培训，交叉标注（两人标同一批，一致率要过 90%），不一致集体讨论定稿
+  - 4.5 验证与迭代：数据集不是一锤子买卖
+    - 微调前让模型自评筛选淘汰不合格样本；结合领域专家意见修正专业性问题
+    - 版本管理：每次修改可追溯，建立「微调效果 ↔ 数据版本」关联
+    - 上线后三个反馈渠道：用户投诉、人工抽检、业务数据统计（某类问题准确率偏低定向补数据）
+    - 【结论】小步快跑：每次补几百到几千条精数据重新微调，别攒一大波（一次加太多引入新老数据矛盾）；有团队每两周迭代 500 条反馈案例，准确率每月稳定提升 5%~8%
+  - 4.6 避坑清单
+    - 贪多求全：不符合业务目标的数据再优质也不用
+    - 迷信自动化：工具识别不了「回复逻辑错误」和「业务规则过期」，关键环节必须人工
+    - 标注标准模糊：标注手册先行
+    - 拿测试集调参：分数虚高上线翻车
+- 五、Easy Dataset 实战：从领域文献到微调数据集
+  - 纯手工痛点：文档丢给 AI 生成 QA 对，长文截断、问题重复、答案幻觉；分批生成前后撞车；加领域标签、换导出格式都得写脚本
+  - Easy Dataset（github.com/ConardLi/easy-dataset，作者 ConardLi）：覆盖「文献处理 → 问题生成 → 答案构建 → 标签管理 → 数据导出」全链路，兼容所有 OpenAI 格式 LLM API（DeepSeek、Qwen、豆包、Kimi、Ollama 本地模型）
+  - 5.1 它到底解决了什么
+    - 大文件丢给 AI QA 质量差 → 章节感知智能分块逐块生成
+    - 上下文限制导致截断/重复 → 分块 + 领域树全局约束
+    - 没地方批量管理标注 → 项目制管理，支持编辑/删除/确认
+    - 领域标签不知道怎么建 → AI 自动生成二级领域树，可手动修正
+    - 推理微调 COT 不会造 → 支持 DeepSeek-R1 等推理模型生成带思维链答案
+    - Alpaca / ShareGPT 互转麻烦 → 导出时一键选择，支持自定义字段
+  - 5.2 快速上手
+    - 【代码】方式一 NPM：git clone https://github.com/ConardLi/easy-dataset.git；npm install && npm run dev（默认 3000 端口）
+    - 【代码】方式二 Docker：docker run -d -p 3000:3000 -v YOUR_LOCAL_DB_PATH:/app/data ghcr.io/conardli/easy-dataset:latest（不挂载卷容器一删数据全没）
+    - 访问 http://localhost:3000
+    - 模型配置：「项目设置 - 模型配置」填接口地址、API 密钥、模型名称；配置存本地不上传；内置 Playground 测连通性，可同时选三个模型对比
+    - 【结论】别用 Ollama 本地跑的 7B/14B 小模型生成结构化数据，输出格式极不稳定；选长上下文大模型 API（DeepSeek-V3、Qwen-Max）
+    - 核心工作流：上传 Markdown 文献 → 智能分块 + 领域树分析 → 按文本块批量生成问题 → 问题管理（删低质问题）→ 批量生成答案（可选推理模型带 COT）→ 数据集管理（编辑/AI 优化/确认）→ 导出 Alpaca / ShareGPT（JSON / JSONL）
+    - 关键细节
+      - 文献格式：早期只支持 Markdown，PDF/Word 先用 MinerU 转换（新版已支持 PDF、DOCX 直接导入）
+      - 分块参数：「任务配置」调文本块最小/最大长度
+      - 问题密度：默认每 240 字符生成一个问题，2000 字的块约出 8 题
+      - 答案生成：基于「问题 + 对应文本块」生成，保证不脱离原文；思维链选 DeepSeek-R1 类推理模型
+      - 批量任务跑的时候别关页面，关了任务就断（主动中断刷新页面）
+  - 5.3 核心原理：三个模块值得偷师
+    - 模型封装：OpenAI 格式是通用货币
+      - 适配一百家厂商只需三个变量：API 前缀（以 /chat/completions 结尾）、API Key（Bearer Token 鉴权）、模型名称
+      - 同一模型不同平台标识不同：DeepSeek 官方 API 调 R1 传 deepseek-reasoner，硅基流动传 deepseek-ai/DeepSeek-R1
+      - 【代码】from openai import OpenAI；def chat(base_url, api_key, model, messages)：client = OpenAI(base_url=base_url, api_key=api_key)；client.chat.completions.create(model=model, messages=messages, temperature=0.3（生成数据集建议调低随机性）, max_tokens=4096（防失控））；返回 resp.choices[0].message.content
+      - 【代码】调用示例：base_url="https://api.deepseek.com"，model="deepseek-chat"，api_key 从环境变量读
+    - 文本分块：章节感知递归分块
+      - 按字符数硬切会把同一章节劈成两半；LangChain RecursiveCharacterTextSplitter 递归用句号、逗号逐级切，最小单元是句子但不管章节
+      - Easy Dataset 做法（lib/split-markdown 模块）：设定最小/最大块长度 → 识别 Markdown 章节结构（# / ## / ###）→ 章节字数在区间内直接成块；超长对该章节递归切分保持语义完整；过短与相邻章节合并 → 输出文本块 + 大纲 + 单块摘要
+      - 这个思路在 RAG 场景同样适用，分块质量直接决定检索质量
+    - 提示词工程：LangGPT 结构化风格
+      - 5 个核心提示词（建领域树、生成问题、打标签、生成答案、优化答案）同一结构：Role → Skill → Goals → OutputFormat → Variables → Workflow → Examples
+      - 打标签提示词要求「优先匹配二级标签，匹配不到用一级，都不行打『其他』」「输出必须是 JSON 数组，不得改变原数据结构」
+      - 【结论】把模型的自由度关进格式的笼子里，输出稳定性大幅提升；前提模型具备长上下文理解能力，别用小模型
+- 六、垂直领域模型评估：测试集与自动化评估
+  - 没有评估环节的微调相当于考完试不对答案；灾难性遗忘（学会专业知识却忘了通用对话能力）
+  - 6.1 为什么通用 Benchmark 不够用
+    - MMLU、ARC 榜单对法律合同审核、医疗报告分析、公司维修手册参考意义有限；企业内部「长尾知识」可能一问三不知
+    - 实际业务评估三个问题：选型验证（Qwen、DeepSeek、GLM 谁对我的业务文档理解力强）、微调效果验证（前后对比，有没有灾难性遗忘）、RAG 效果归因（检索没检到还是模型没用好上下文）
+  - 6.2 三条评估路线
+    - 确定性评估：答案精确匹配；判断/单选/多选；零成本零歧义；高质量客观题库稀缺编题成本高
+    - 统计相似度：BLEU / ROUGE / METEOR；翻译、摘要；自动化程度高；只算词汇重叠，「利率上调」和「加息」被判不同，容易误杀好模型
+    - 模型语义评估：LLM as a Judge；简答/开放题；开放式问答最优解；依赖裁判模型水平和评分 Prompt 设计
+    - 【结论】客观题用规则判分，主观题用 LLM-as-Judge，终局对比加一轮人工盲测；纯人工阅卷不现实且主观标准会漂移
+  - 6.3 测试集怎么造
+    - 评估数据集 = 题目 + 标准/参考答案 + 评分规则；Easy Dataset 1.7+ 评估模块五种题型
+      - 判断题：核心事实是否搞混，检测幻觉（文档说「温度不能超过 100 度」→ 问「是否可达 105 度？」）
+      - 单选题：干扰项下的知识提取与辨析，4 选 1
+      - 多选题：信息完整性（漏一个点就错），答案为字母数组 ["A","C"]
+      - 简答题：核心知识点精简表达（20 字内）
+      - 开放题：推理与总结能力（「根据文档分析设备异响的可能原因」）
+    - 各题型比例可配（如 30% 判断题测幻觉 + 70% 简答题测理解）
+    - 测试集三条来源
+      - 从领域文献提取：文献切块后按块自动生成题目
+      - 从训练集转化/生成变体：一键转测试集，或换问法、换题型生成「变体」防止背题；小规模数据集场景训练集不用割肉划分
+      - 导入已有题库：JSON/XLS/XLSX 按模板导入，平台内置多学科领域题库
+  - 6.4 三种判卷方式
+    - 规则判分（客观题）：答案唯一直接代码比对，零调用成本；可勾多个模型并发「考试」，按题型、标签筛选，从 1000 题动态抽 50 题快速出结果
+    - 教师模型打分（主观题）：更强模型当裁判给量化分数 + 定性评语；内置评分标准偏宽泛，强烈建议按业务定制评分细则（Prompt 全开放可改，评分锚点对应 {{scoreAnchors}} 变量）
+      - 【结论】长期对比时固定教师模型和评分配置，否则分数不能横向比
+      - 【结论】先拿 20 题小样本跑通，确认裁判口味符合预期再上量
+    - 人工盲测（终局裁决）：两个模型回答匿名化，评审投票左好/右好/平局，类似 Chatbot Arena 的 Side-by-Side；消除品牌刻板偏见；投完票揭晓谜底生成胜率统计；平局多说明俩模型在该题库下半斤八两
+  - 6.5 评估闭环
+    - 领域文献 → 生成测试集（5 种题型按比例）→ 客观题规则判分 / 主观题教师模型打分 → 评估报告（量化指标）→ 分数接近？是则人工盲测终裁，否则选型/迭代决策 → 发现短板 → 补充数据 → 重新微调 → 回到生成测试集
+- 写在最后
+  - 【结论】数据 > 参数：调参前先审数据，大部分「模型不行」其实是「教材不行」
+  - 【结论】流程 > 灵感：获取 → 清洗 → 标注 → 校验 → 导出 → 评估 → 迭代
+  - 【结论】工具 > 蛮力：Easy Dataset 打通文献到数据集、测试集到评估报告链路，但工具生成的每一条数据最终都得经得起人工审视

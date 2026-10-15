@@ -1,0 +1,14 @@
+{
+  "records": [
+    {
+      "vendor": "ACME",
+      "date": "2026-02-18",
+      "category": "labor",
+      "status": "settled",
+      "summary": "某地区子公司就加班记录问题与监管机构达成整改协议。",
+      "source": "地区劳动监管机构公告",
+      "url": "https://example.test/regulator/acme-labor-settlement"
+    }
+  ]
+}
+

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vendor-guard-course"
+version = "0.1.0"
+description = "Deep Agents 供应商准入尽调教学项目"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "deepagents>=0.5.4",
+    "langchain-openai>=1.0",
+    "langsmith>=0.4",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+vendor-guard = "vendor_guard.cli:main"
+vendor-guard-create-dataset = "vendor_guard.langsmith_dataset:main"
+vendor-guard-evaluate = "vendor_guard.langsmith_evaluation:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

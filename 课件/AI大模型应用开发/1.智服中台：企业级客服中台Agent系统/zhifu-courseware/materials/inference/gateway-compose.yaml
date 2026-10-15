@@ -1,0 +1,32 @@
+services:
+  model_gateway:
+    image: haproxy:3.2-alpine@sha256:5961c68bc8a81c5124d0a98ab20f81b74717d6afe596e805977d9cf84c126222
+    platform: linux/amd64
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # 两个网关分别部署，内网 L4 LB 使用 HTTPS /healthz 检查各自状态。
+    ports:
+      - "${GATEWAY_BIND_IP:?请填写网关主机私网IP}:443:443"
+    volumes:
+      - type: bind
+        source: ./haproxy.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - source: model_gateway_tls
+        target: model_gateway.pem
+    command: ["haproxy", "-W", "-db", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  model_gateway_tls:
+    # PEM 包含域名证书链与私钥；域名解析到现有内网 L4 LB。
+    # 此固定镜像使用 UID/GID 99；Linux 源文件使用受控账户所有者、组 99、权限 0640。
+    # Compose 的文件 secret 不会修改源文件权限，部署前确认容器账户可以读取。
+    file: ${GATEWAY_TLS_FILE:?请填写网关TLS证书文件的绝对路径}

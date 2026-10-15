@@ -1,0 +1,4 @@
+[console_scripts]
+vendor-guard = vendor_guard.cli:main
+vendor-guard-create-dataset = vendor_guard.langsmith_dataset:main
+vendor-guard-evaluate = vendor_guard.langsmith_evaluation:main

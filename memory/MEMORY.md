@@ -1,0 +1,31 @@
+# Memory Index
+
+- [学习要求](learning-requirements.md) — 学习课件时：讲解直接写进代码库(不单独出md)、查漏补缺、核查文档与代码错误、有真实来源、过代码带全局架构思路以掌握整个项目；实战章节必须按 file:line 逐行讲代码+变量具体值+Python 语法点，不能只讲流程和结果数字
+- [Python 水平](user-python-level.md) — 用户 Python 基础较弱，随堂补基础知识点，掌握后只讲难点
+- [数学水平](user-math-level.md) — 数学基础薄弱(微积分/线代/概率)：讲底层算法前先按两段式补数学(定义+直觉+手算算例→再映射应用)，用程序员类比，记号首现必解释
+- [Python 高频坑](user-python-pitfalls.md) — Java→Python 迁移坑：空构造+setter、元组当dict、忘return、推导式语法、内置名遮蔽、枚举key用裸字符串；FastAPI 坑：keyword-only位置传参、路径参数三处名字一致+漏:int、status_code塞返回体
+- [NovaPay 作业重做](novapay-homework-redo.md) — 练习项目 DeepAgent-novapay-practice + HOMEWORK-GUIDE.md 15步指南，参考答案在 meishiyi/08_DeepAgent
+- [冲刺计划 9.12](study-plan-sep12.md) — 9/12 前学完全部课程并能独立搭项目；计划文件 C:\workspace\学习计划-冲刺9.12.md，逐周里程碑见该文件
+- [助教角色](tutor-role.md) — 冲刺期每日助教：每次会话先读计划核实进度；每日上午输入/下午动手；每块内容学法四步=先立三问→用户自读+预测题驱动(先答再校对补架构why)→填三问笔记→最后看视频；读现有项目求理解型、大项目学分支增量；教练模式不代写、20分钟解堵；每日 7:03 定时核查（7天需重建）
+- [提问话术库](tutor-prompting-guide.md) — 每次学习会话开始时主动发当场景适用的 2-3 条提问模板给用户；宽泛提问时用模板引导
+- [小块慢讲](pacing-small-chunks.md) — 一次只讲一个知识点,别大密度输出;教学消息微步模板=一行📍+≤4句或≤5行demo+一个"你做",不用表格/长清单;不熟内容先做后讲;课件勘误教到才说、不预写笔记
+- [确认题频率](quiz-frequency-feedback.md) — 不布置手算题等用户答("不能用算了,直接给答案")：数字题答案+一句解释直接给；每步唯一"你做"=跑 demo 看输出；用户说"考我"才出题
+- [先概念后应用](teaching-concepts-first.md) — 讲新概念两段式：先纯定义+直觉+可手算算例(不掺应用名词)，全讲完再统一做应用映射
+- [智保通第一阶段](zhibaotong-stage1.md) — 智保通只是每日滚动课程里"当前一个项目"、非终点；重心是可复用的"动手+高效"打法。模块四保险Agent实战，代码在 harness_zbt，理论+对照地图已备
+- [系统代理干扰 Python 联网](windows-proxy-python-requests.md) — 本机 VPN 代理 127.0.0.1:7890，curl 直连但 Python requests 走代理；HF 下载已用用户级 NO_PROXY=hf-mirror.com,.hf.co 绕过；uvx 最新版 hf download 会卡 0 字节，改用项目 venv 的 snapshot_download
+- [模块六汇总笔记追加规则](module6-notes-doc.md) — 课件/大模型微调.md 每章只追加"故事线一句话+要记+用户追问Q&A"，不记流水账；必须用 Markdown 层级（### 小标题、**Q：** 加粗问题、列表），不写缩进纯文本；用户编辑器同时开着，写前提醒保存、写后提醒重开并回读确认
+- [Bash 含中文即失败](bash-chinese-chars-fail.md) — 这台机器 Bash 命令串里有中文字符就 exit 127；中文路径/模式/内容改用 Read/Grep/Edit/Write 或先写成脚本再跑
+- [面试深度标尺](interview-goal.md) — 2026-09-29 用户目标是面试但仍以学习为目的：不要题库/"面试官会问"格式，带学格式不变，只把深度定在面试够用（是什么/为什么/怎么选），实验细节与操作步骤一笔带过
+- [智服中台课程](zhifu-platform-course.md) — 2026-09-29 开学的新课（后端工程为主）：代码在 C:\workspace\zhifu-platform（10 个 course/* 分支+tag，diff 用 tag，git 用 checkout）；笔记/地图在 学习笔记/智服中台.md；不往 course 仓库写注释；00 理解型+之后只读增量
+- [先全流程位置再代码](teaching-map-before-code.md) — 用户困惑时先给"整条生命线里的位置"（编号站点，不画 ASCII 箭头图）→ 类比 → 才 file:line；"为什么要X"基础缺口用类比一屏答；复述核对答"对+一条补充"；后台核对代理不能让用户等（先答后核，限工具次数）；新窗口先读笔记末尾接上；每次回答先"整体一句+接前文"，公式推导默认只给结论不要求会算
+- [不提行号、直接讲、边学边跑](teach-directly-no-line-refs.md) — 2026-09-29 课件 5 起：定位只用小节标题不用行号（用户看渲染视图）；用户不再自读课件，Claude 通读后按小节完整讲；课件里的图默认 curl 下载后 Read 看并一起讲；本篇 demo 当场在本机 CPU 跑（09_HuggingFace venv + models/Qwen3-0.6B），vLLM 留租卡日
+- [demo 输出必须带解释](explain-demo-output.md) — 2026-09-29 采样 demo 两轮没看懂：贴输出前先说实验做什么/想看什么，输出逐行白话标注、每个词/数说清指什么、≤5 行，再给一句结论；误解时用类比重述+把每个候选接出的完整结果写出来
+- [模块六课件 6/7 顺序](module6-lesson6-7-plan.md) — 课件 6 下半篇 → 课件 7 文件夹四篇（RMSNorm/GQA/RoPE/MoE）→ 回头重讲 LLaMA 结构图
+- [答案写在最后一条消息](answer-in-final-message.md) — 先改笔记再在最后一条消息完整输出讲解，别只写进 md
+- [讲参数：点名+怎么调](params-name-and-how-to-tune.md) — 并列讲多个参数时每条写明参数名；讲完影响必须讲怎么调（硬约束→场景起步值→压测对 SLO）
+- [AutoDL 每个模型一个文件夹](autodl-model-per-folder.md) — 给下载命令时 --local_dir 一律新建 model_<简称>，运行配 MODEL_DIR；code/model 是 DeepSeek-R1-Distill-Qwen-7B 别动，脚本在 code/02
+- [Agent 面试向复习计划](agent-review-plan-interview.md) — 2026-10-07 起以智服中台五课为主干（tag 00/01→02-04→05→06/07→08/09），课件知识按需倒着插（RAG 大块+本机跑插第三课）；7 站主线地图 面试复习-00-主线地图.md；计划文件 学习笔记/Agent复习计划-面试向.md 每次先读末尾锚点；四条规则=三问即止/30 分钟定时盒+待深挖清单/先看 diff 再讲原理/没懂先记录；抓大放小三档（计划 §3.5），读码停在 09 只看关键几行、不逐行；简历未定稿不按简历学；模块五六另有计划别碰
+- [简历项目](resume-project.md) — 2026-10 求职简历：4 个项目已定（数据编排 Agent / 工单诊断 Agent / LoRA 微调 / 真实 RAG），草稿 C:\workspace\简历\简历草稿-v1.md，每条贡献标 [真实]/[课程]/[待核实]，数字必须来自真实实验，不提部门变动、技术词对齐时间线
+- [OCP 文档来源](ocp-docs-source.md) — OCP 文档在 GitHub oceanbase/ocp-doc（V4.4.0 分支 raw 可拉）、文档页加 /index.md 得 markdown；28 篇关键文档副本在 C:\workspace\resume-refs\ocp-docs
+- [双机同步仓库](sync-repo-two-machines.md) — 2026-10-15 起家⇄公司用 GitHub ai-agent-learnning 同步记忆/笔记/课件/练习；"推送进度"=跑 scripts/sync-push.ps1、"拉取"=sync-pull.ps1；开工先 pull 收工必 push；简历目录不同步（用户明确）
+- [模块五六复习项目](review-module5-6.md) — 2026-10-02 起六重点复习：总纲(目标矩阵+三条主线+GPU执行单+锚点)、知识地图 .md/.mm(ProcessOn)、全量清单在 学习笔记/；每次先读总纲锚点；顺序 Transformer→RoPE→GQA→MoE→LoRA→QLoRA→vLLM→租卡

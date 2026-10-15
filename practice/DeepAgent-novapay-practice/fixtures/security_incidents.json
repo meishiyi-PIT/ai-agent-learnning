@@ -1,0 +1,13 @@
+{
+  "records": [
+    {
+      "vendor": "ACME",
+      "date": "2025-11-03",
+      "severity": "medium",
+      "summary": "员工邮箱遭遇钓鱼攻击，未发现客户数据外泄。",
+      "status": "closed",
+      "source": "ACME 事件公告"
+    }
+  ]
+}
+

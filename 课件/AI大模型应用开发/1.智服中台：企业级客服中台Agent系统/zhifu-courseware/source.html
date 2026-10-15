@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="按课程阶段阅读项目源码，筛选文件、定位函数，查看对应语言的语法高亮。">
+  <title>源码阅读 · 智服中台</title>
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./source.css">
+</head>
+<body>
+  <a class="skip-link" href="#reader">跳转源码阅读区</a>
+  <header class="site-header"><div class="header-inner">
+    <a class="course-brand" href="./course.html"><img class="brand-logo" src="./brand-logo.png" alt="术核" height="34"><span>智服中台</span></a>
+    <nav aria-label="课程导航"><a href="./course.html">课程目录</a><a href="./materials/branch-guide.html">代码分支</a></nav>
+  </div></header>
+  <main id="reader">
+    <div class="page-heading">
+      <div><p class="eyebrow">课程配套源码</p><h1>源码阅读</h1><p class="description">选择代码阶段与文件，查看每次需求开发和性能优化的具体实现。</p></div>
+      <a class="back-link" href="./course.html">返回课程目录 <span aria-hidden="true">↗</span></a>
+    </div>
+    <div class="reader-layout">
+      <aside class="file-panel" aria-label="源码选择">
+        <h2>代码阶段与文件</h2>
+        <label for="stage">代码阶段</label>
+        <select id="stage" disabled><option>正在读取阶段…</option></select>
+        <div class="file-heading"><label for="file-filter">查找文件</label><span id="file-count" role="status"></span></div>
+        <input id="file-filter" type="search" placeholder="输入文件名或路径" autocomplete="off" disabled>
+        <label class="sr-only" for="path">源码文件</label>
+        <select id="path" size="12" disabled aria-describedby="file-count"></select>
+        <p class="panel-hint">切换阶段可查看同一文件在不同版本中的实现。</p>
+        <div class="symbol-control"><label for="symbol">函数或类</label><select id="symbol" disabled><option value="">整个文件</option></select><p id="symbol-hint">选择 Python 文件后可定位函数与类。</p></div>
+      </aside>
+      <section class="code-panel" aria-labelledby="file-title">
+        <div class="file-header">
+          <div class="file-caption"><span class="file-icon" aria-hidden="true">&lt;/&gt;</span><div><h2 id="file-title">正在读取源码…</h2><p id="file-path"></p></div></div>
+          <span id="language" class="language-badge">—</span>
+        </div>
+        <div class="code-toolbar">
+          <div class="file-actions"><button id="copy-source" type="button" disabled>复制代码</button><button id="copy-link" type="button" disabled>复制链接</button><button id="wrap-code" type="button" aria-pressed="false">自动换行</button></div>
+          <form id="jump-form"><label for="line-number">定位行号</label><input id="line-number" type="number" min="1" value="1" required disabled><button type="submit" id="jump-button" disabled>跳转</button></form>
+        </div>
+        <p id="error" role="alert" hidden></p>
+        <div id="source" class="source-lines" role="region" aria-label="源码及行号，可滚动阅读" aria-busy="true" tabindex="0"></div>
+        <div class="code-status"><span id="position" role="status">正在读取源码…</span><span id="line-count"></span></div>
+        <div class="revision-info"><span class="revision-label">固定版本</span><p id="identity" aria-live="polite"></p></div>
+      </section>
+    </div>
+    <p class="reader-note">点击行号可以保存阅读位置；复制链接可直接打开对应阶段、文件与函数。</p>
+  </main>
+  <footer class="site-footer"><span>智服中台</span><a href="./course.html">课程目录</a></footer>
+  <div id="action-status" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">源码阅读需要启用 JavaScript。</p></noscript>
+  <script src="./code/manifest.js"></script>
+  <script src="./source-assets/reader.js"></script>
+</body>
+</html>

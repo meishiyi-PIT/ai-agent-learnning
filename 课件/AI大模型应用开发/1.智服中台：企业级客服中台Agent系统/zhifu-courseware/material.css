@@ -1,0 +1,53 @@
+.material-page .hero-inner { padding-top: 42px; padding-bottom: 36px; }
+.material-page .eyebrow a { color: #aac4ff; text-decoration: none; }
+.material-page .eyebrow a:hover { color: white; text-decoration: underline; }
+.material-page h1 { max-width: 1080px; overflow-wrap: anywhere; }
+.material-page .hero-description { max-width: 840px; }
+.material-page .reading-layout { padding-top: 36px; }
+.material-page .material-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 28px; padding: 0 0 20px; border-bottom: 1px solid var(--line); }
+.material-page .material-tabs a { display: block; padding: 9px 13px; border: 1px solid #e0e7f1; border-radius: 7px; background: #fafcff; color: #536785; font-size: 13px; line-height: 1.6; text-decoration: none; }
+.material-page .material-tabs a:hover { color: #245be0; border-color: #aac6ff; background: #f3f7ff; }
+.material-page .material-tabs a[aria-current="page"] { color: #1d54d0; border-color: #bfd2ff; background: #eaf1ff; font-weight: 650; }
+.material-page .sidebar-resource { gap: 14px; }
+.material-page .material-nav { display: grid; gap: 5px; }
+.material-page .material-nav a { display: block; padding: 8px 10px; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: #586d8c; line-height: 1.65; }
+.material-page .material-nav a:hover { color: #245be0; background: #f0f5ff; }
+.material-page .material-nav a[aria-current="page"] { color: #1d54d0; border-left-color: #2f6bff; background: #eaf1ff; font-weight: 650; }
+.material-page .related-lessons { display: grid; gap: 10px; }
+.material-page .sidebar > .related-lessons { margin: 24px 10px 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.material-page .related-lessons a > span { display: block; color: #7a879b; font-size: 11px; }
+.material-page .related-lessons a { color: #465a7c; font-size: 12px; line-height: 1.8; text-decoration: none; }
+.material-page .related-lessons a:hover { color: #245be0; text-decoration: underline; }
+.material-page .related-lessons > span, .material-page .related-lessons > p { margin: 0; color: #6b7c97; font-size: 12px; line-height: 1.8; }
+.material-page .mobile-related { display: none; }
+.material-page .material-toc nav { padding-bottom: 3px; }
+.material-page .material-toc a[aria-current="location"] { color: #1d54d0; border-left-color: #2f6bff; background: #eaf1ff; font-weight: 650; }
+.material-page .article-body > p:first-child { margin-top: 0; }
+.material-page .article-body h2 { overflow-wrap: anywhere; }
+.material-page .article-body .code-heading > span { min-width: 0; overflow-wrap: anywhere; }
+.material-page .article-body .copy-code { flex-shrink: 0; min-height: 28px; padding: 5px 8px; }
+.material-page .article-body .copy-code:disabled { cursor: progress; color: #9dafcb; }
+.material-page .article-body pre.shiki { tab-size: 4; }
+.material-page .article-body pre.shiki code { white-space: pre; }
+/* 公式按可用宽度换行；命令继续保留原始行结构并在代码区域滚动。 */
+.material-page .code-example[data-language="text"] pre.shiki,
+.material-page .code-example[data-language="text"] pre.shiki code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.material-page .article-footer { align-items: baseline; flex-wrap: wrap; }
+.material-page .article-footer a { flex-shrink: 0; }
+.material-page .copy-status { max-width: calc(100% - 32px); line-height: 1.8; text-align: center; }
+.material-page .copy-status[data-kind="error"] { background: #802a35; }
+@media (max-width: 850px) {
+  .material-page .reading-layout { padding-top: 28px; }
+  .material-page .material-tabs { gap: 7px; margin-bottom: 22px; }
+  .material-page .mobile-related { display: grid; margin-top: 24px; padding: 18px 20px; border: 1px solid #e0e8f4; border-radius: 8px; background: #f8faff; }
+}
+@media (max-width: 560px) {
+  .material-page .hero-inner { padding: 30px 22px 28px; }
+  .material-page .hero-description { font-size: 14px; }
+  .material-page .reading-layout { padding-top: 0; }
+  .material-page .material-tabs { gap: 6px; padding-bottom: 18px; }
+  .material-page .material-tabs a { padding: 8px 10px; font-size: 12px; }
+  .material-page .article-body pre.shiki { padding: 16px; }
+  .material-page .mobile-related { margin-top: 20px; padding: 16px; }
+  .material-page .article-footer { gap: 10px 18px; }
+}

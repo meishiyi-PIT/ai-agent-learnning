@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1456" height="140" viewBox="0 0 1456 140" role="img" aria-labelledby="title" data-source="slides/lesson-05.md" data-diagram-index="12">
+  <title id="title">面试：解释性能优化</title>
+  <defs><marker id="arrow" viewBox="0 0 6 6" refX="6" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L6 3 L0 6" fill="#64748b"/></marker></defs>
+  <style>.node{fill:#f7faff;stroke:#a7bde4}.heading{font:600 16px "Microsoft YaHei",sans-serif;fill:#14213d}.file{font:13px Consolas,monospace;fill:#526077}.function{font:14px Consolas,monospace;fill:#2458a6}.divider{stroke:#dce5f2}.connector{fill:none;stroke:#64748b;stroke-width:1.5;marker-end:url(#arrow)}</style>
+  <path class="connector" data-from="A" data-to="B" d="M176 70H224"/><path class="connector" data-from="B" data-to="C" d="M372 70H420"/><path class="connector" data-from="C" data-to="D" d="M760 70H808"/><path class="connector" data-from="D" data-to="E" d="M988 70H1036"/><path class="connector" data-from="E" data-to="F" d="M1200 70H1248"/>
+  <g data-node="A" transform="translate(20 20)"><rect class="node" width="156" height="100" rx="8"/><text class="heading" x="20" y="56">明确环境与负载</text></g>
+  <g data-node="B" transform="translate(232 20)"><rect class="node" width="140" height="100" rx="8"/><text class="heading" x="20" y="56">取得原始指标</text></g>
+  <g data-node="C" transform="translate(428 20)"><rect class="node" width="332" height="100" rx="8"/><text class="heading" x="20" y="29">提出有依据的措施</text><path class="divider" d="M20 43H312"/><g data-stage="00-handover" data-path="src/zhifu/modules/knowledge/vector.py" data-symbol="RetrievalClient"><text class="file" x="20" y="65">knowledge/vector.py</text><text class="function" x="194.109375" y="65">RetrievalClient</text></g><g data-stage="00-handover" data-path="src/zhifu/modules/knowledge/batching.py" data-symbol="Batcher"><text class="file" x="20" y="88">knowledge/batching.py</text><text class="function" x="194.109375" y="88">Batcher</text></g></g>
+  <g data-node="D" transform="translate(816 20)"><rect class="node" width="172" height="100" rx="8"/><text class="heading" x="20" y="56">固定条件重新测量</text></g>
+  <g data-node="E" transform="translate(1044 20)"><rect class="node" width="156" height="100" rx="8"/><text class="heading" x="20" y="56">解释收益与代价</text></g>
+  <g data-node="F" transform="translate(1256 20)"><rect class="node" width="180" height="100" rx="8"/><text class="heading" x="20" y="56">核对质量 权限 费用</text></g>
+</svg>

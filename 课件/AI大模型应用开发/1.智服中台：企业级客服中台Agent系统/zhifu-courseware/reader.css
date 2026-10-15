@@ -1,0 +1,40 @@
+:root { color-scheme: light; font-family: 'Microsoft YaHei', sans-serif; color: #17304d; background: #f5f8fc; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header, main, footer { max-width: 1320px; margin: 0 auto; padding: 32px 44px; }
+header { border-bottom: 1px solid #cdd8e7; }
+header h1 { font-size: 34px; margin: 18px 0 10px; }
+header p, .metadata { color: #51637a; line-height: 1.6; }
+a { color: #2458a6; text-underline-offset: 4px; }
+button, select { font: inherit; border: 1px solid #879cba; border-radius: 5px; padding: 10px; background: white; }
+button { background: #2458a6; color: white; cursor: pointer; }
+button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #dc970e; outline-offset: 3px; }
+.source-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
+.source-controls label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.source-controls select { max-width: 430px; }
+.source-controls .wide { flex-grow: 1; }
+.metadata { font-family: Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+.source-lines { background: white; border: 1px solid #d2dcea; overflow-x: auto; padding: 12px 0; }
+.code-line { display: flex; min-width: max-content; line-height: 1.65; font: 15px/1.65 Consolas, 'Microsoft YaHei', monospace; }
+.code-line.selected { background: #eaf1fd; }
+.code-line:target { background: #fff0c8; }
+.code-line a { display: inline-block; flex: 0 0 64px; text-align: right; padding: 0 18px 0 6px; color: #64758c; text-decoration: none; user-select: none; }
+.code-line code { white-space: pre; padding-right: 20px; font: inherit; }
+.lesson-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 22px; }
+.lesson { background: white; border: 1px solid #d2dcea; padding: 24px; border-top: 4px solid #2458a6; }
+.lesson .number { color: #2458a6; font: 600 28px Consolas, monospace; }
+.lesson h2 { font-size: 23px; line-height: 1.4; }
+.lesson p { color: #51637a; line-height: 1.7; }
+.lesson nav { display: flex; flex-wrap: wrap; gap: 18px; }
+.material { max-width: 980px; background: white; line-height: 1.9; }
+.material p, .material li, .material td, .material th { overflow-wrap: anywhere; }
+.material-toc { border: 1px solid #d2dcea; padding: 12px 18px; background: #f5f8fc; }
+.material-toc summary { cursor: pointer; color: #2458a6; font-weight: 600; }
+.material-toc ol { margin-bottom: 0; }
+.material h2 { scroll-margin-top: 24px; }
+.material h1 { font-size: 32px; }.material h2 { margin-top: 38px; }
+.material table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.material th, .material td { border: 1px solid #d2dcea; padding: 8px 12px; text-align: left; }
+.material pre { padding: 16px; background: #eef3f9; overflow-x: auto; }
+.notice { padding: 16px 22px; border-left: 4px solid #b57900; background: #fff7e7; line-height: 1.7; }
+@media (max-width: 700px) { header, main, footer { padding: 22px 18px; } .source-controls label, .source-controls select { width: 100%; max-width: 100%; } .lesson-list { grid-template-columns: 1fr; } .material table { display: block; overflow-x: auto; } }

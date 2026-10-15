@@ -1,0 +1,499 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.0.1">
+<node TEXT="模块五+六 复习知识地图：从 Transformer 到大模型训练/微调/部署">
+<node TEXT="模块五 AI 底层算法原理（打地基：训练循环 + 注意力 + 原版 Transformer）">
+<node TEXT="1 神经网络基础（1.基础架构篇）→ 代码 deepLearning/FullyConnectedNet.py、code/mlp_cro">
+<node TEXT="感知机：z = wᵀx + b，y = sign(z)；权重=重要性、偏置=门槛、|z|=确信度">
+</node>
+<node TEXT="激活函数：没有它多少层都是线性；Sigmoid 1/(1+e^-x) 梯度消失；Tanh 零均值；ReLU max(0,x) 正半轴梯度恒 1，Dead ReLU → LeakyReLU">
+</node>
+<node TEXT="一层网络 = 矩阵乘法 + 激活函数；GPU 为矩阵乘法而生">
+</node>
+<node TEXT="万能逼近定理：神经元够多就能逼近任意连续函数">
+</node>
+<node TEXT="前向传播：逐层 乘权重 + 加偏置 + 激活，不改参数 = 推理">
+</node>
+<node TEXT="Softmax：e^{x_i}/Σe^{x_j}，不改大小顺序只给概率；手算 [2,1,0.1] → [0.659,0.242,0.099]">
+</node>
+<node TEXT="张量基本功：shape、广播、reshape(-1)、matmul/bmm、transpose/permute → 代码 code/transformercode/PyTorch张量操作学习笔记.md">
+</node>
+</node>
+<node TEXT="2 训练优化（2.训练优化篇）→ 代码 deepLearning/backward.py、deepLearning/train.py">
+<node TEXT="初始化：Kaiming 正态 std=√(2/fan_in)（配 ReLU）；Xavier（配 Transformer）">
+</node>
+<node TEXT="损失：MSE 平方放大大误差；交叉熵衡量两个概率分布差距，labels 是类别索引不是 one-hot">
+</node>
+<node TEXT="梯度下降：新参数 = 旧参数 − 学习率 × 梯度；负梯度是下降最快方向">
+</node>
+<node TEXT="学习率：太大震荡、太小慢；从 0.01/0.001 起试，Adam/AdamW 自适应">
+</node>
+<node TEXT="反向传播 = 链式法则：外层导数 × 内层导数；Autograd requires_grad + loss.backward()">
+</node>
+<node TEXT="优化器：损失打分 → 反向算梯度 → 优化器更新；Adam 给每个参数自适应步长">
+</node>
+<node TEXT="训练五句代码：logits=model(x) → loss=loss_fn → zero_grad → backward → step">
+</node>
+<node TEXT="训练六步：初始化 → 前向 → 算损失 → 反向 → 更新 → 判断收敛（早停）">
+</node>
+<node TEXT="预处理：Min-Max 归一化、one-hot；TensorBoard 看曲线">
+</node>
+</node>
+<node TEXT="3 CNN（1./2.卷积神经网络深度解析）→ 代码 deepLearning/leNet5*.py、code/cnn*">
+<node TEXT="全连接两大伤：拍平丢空间结构、参数爆炸">
+</node>
+<node TEXT="卷积 = 滑动窗口 + 加权求和；权重共享 + 局部连接">
+</node>
+<node TEXT="卷积核形状 [C_out, C_in, K, K]，参数量与图片大小、batch 无关；pad=K//2 尺寸不变">
+</node>
+<node TEXT="池化：零参数、通道独立、保留最强特征">
+</node>
+<node TEXT="过拟合 = 模型容量 &gt; 数据信息量；Dropout 随机丢神经元">
+</node>
+<node TEXT="梯度消失/爆炸 = 连乘效应；残差 F(x)+x 梯度 ∂F/∂x+1 直通 → Transformer 残差的来源">
+</node>
+<node TEXT="BatchNorm 把每层输出拉回稳定区间 → 对比 Transformer 的 LayerNorm">
+</node>
+</node>
+<node TEXT="4 词向量与分词（3.词向量入门到文本分类实战）→ 代码 deepLearning/text_cls、deepLearning/token_test.py">
+<node TEXT="词向量：词 = 坐标，语义近则距离近；余弦相似度只看方向">
+</node>
+<node TEXT="one-hot 两硬伤：又高又稀、任意两词正交">
+</node>
+<node TEXT="分词粒度：字 / 词 / 子词（BPE、WordPiece、SentencePiece，大模型主流）；API 计费的 token 就是它">
+</node>
+<node TEXT="nn.Embedding = 可训练查找表 (vocab_size × dim)，整数索引取行；padding_idx 不更新">
+</node>
+<node TEXT="文本分类实战：Embedding → 网络 → 分类头，训练/测试/早停循环">
+</node>
+</node>
+<node TEXT="5 注意力机制（4.注意力机制）★ → 代码 deepLearning/attention/">
+<node TEXT="公式：Attention(Q,K,V) = softmax(QKᵀ/√d_k)V；三步 算分 → 分账(softmax) → 加权求和">
+</node>
+<node TEXT="Q/K/V 搜索引擎类比：Q 问什么、K 被检索的索引、V 取出的内容">
+</node>
+<node TEXT="√d_k：维度大点积方差大，softmax 饱和梯度消失，除以 √d_k 拉回">
+</node>
+<node TEXT="自注意力：Q=K=V 都来自同一句；先过 W_Q/W_K/W_V 线性变换再算 → self_attention.py">
+</node>
+<node TEXT="多头 = 切蛋糕：512 维切 8 头每头 64；各头独立 W，拼接后过一次 Linear → multi_head.py">
+</node>
+<node TEXT="生产用官方 nn.MultiheadAttention / F.scaled_dot_product_attention → official.py">
+</node>
+<node TEXT="给 CNN 装注意力：特征图 (N,C,H,W) → (N,H·W,C) 当句子 → cnn_attention.py">
+</node>
+</node>
+<node TEXT="6 Transformer 原版（5.Transformer）★ → 代码 code/transformercode/model.py、deepLearning/transformer/">
+<node TEXT="架构全景：Seq2Seq 困境 → 注意力分轻重 → Encoder 读懂 + Decoder 逐字写 → overview.py">
+</node>
+<node TEXT="Embedding × √d_model：Xavier 后向量服从 N(0,1/d)，乘 √d 拉回 N(0,1) 与位置编码同量级 → embedding.py">
+</node>
+<node TEXT="正余弦位置编码 → positional.py">
+<node TEXT="PE(pos,2i)=sin(pos/10000^{2i/d})，PE(pos,2i+1)=cos(...)；偶数维 sin 奇数维 cos">
+</node>
+<node TEXT="优点：唯一、相对位置可推（PE_{pos+k} 是 PE_pos 的线性变换）、多频率、无参数、与词向量相加">
+</node>
+<node TEXT="相加不覆盖：512 维里语义向量与位置向量近似正交；(x+p)W^Q·((x+p)W^K)ᵀ 展开四项">
+</node>
+<node TEXT="register_buffer：不训练但随模型保存">
+</node>
+</node>
+<node TEXT="多头注意力 + 掩码">
+<node TEXT="Padding Mask：pad 位置分数填 -1e9 → softmax 后 ≈ 0">
+</node>
+<node TEXT="attention(q,k,v,mask)：scores=QKᵀ/√d_k → masked_fill → softmax → dropout → ·V；形状 (batch, n_head, seq, d_k)">
+</node>
+<node TEXT="一个大 Linear 投影后 view+transpose 切头，等价于 h 个小矩阵">
+</node>
+</node>
+<node TEXT="残差 + LayerNorm + FFN">
+<node TEXT="残差 输出 = LayerNorm(x + Sublayer(x))（Post-Norm）；梯度走 +x 高速公路；要求子层输入输出同维">
+</node>
+<node TEXT="LayerNorm LN(x)=γ⊙(x−μ)/√(σ²+ε)+β，横着算单个样本；BatchNorm 竖着算一批，NLP 变长序列用不了">
+</node>
+<node TEXT="FFN(x)=W₂·ReLU(W₁x+b₁)+b₂，512→2048→512；注意力横向通信、FFN 纵向加工；2/3 参数在 FFN">
+</node>
+<node TEXT="激活：ReLU（原版）→ GELU（BERT/GPT-2）→ SwiGLU（LLaMA/Qwen/DeepSeek）">
+</node>
+</node>
+<node TEXT="Encoder/Decoder 协作">
+<node TEXT="Encoder 层 = 自注意力 + FFN，堆 N=6；不需要遮未来">
+</node>
+<node TEXT="Decoder 层 = 掩码自注意力 + 交叉注意力 + FFN">
+</node>
+<node TEXT="三角掩码 1−tril(ones)，第 i 位只能看 1..i；最终掩码 = pad_mask | sub_mask">
+</node>
+<node TEXT="Teacher Forcing：答案右移一位喂入 + 三角掩码并行训练；推理时逐字自回归">
+</node>
+<node TEXT="Cross-Attention：Q 来自 Decoder，K/V 来自 Encoder 的 memory；不用三角掩码">
+</node>
+<node TEXT="Generator：Linear(d_model→vocab) + softmax；温度 p_i = exp(z_i/T)/Σexp(z_j/T)，T 小削尖 T 大熨平">
+</node>
+</node>
+<node TEXT="训练与工程">
+<node TEXT="Xavier 均匀 U(±√6/√(n_in+n_out))，只初始化 dim&gt;1 的矩阵">
+</node>
+<node TEXT="数据管线：&lt;bos&gt; 加在 Decoder 输入开头、&lt;eos&gt; 加在标签结尾，错位一格全白训 → data_loader.py">
+</node>
+<node TEXT="Label Smoothing 正确类 1−ε；BLEU n-gram 重合度">
+</node>
+<node TEXT="官方模块 nn.TransformerEncoderLayer：batch_first=True，norm_first=True 即 Pre-Norm">
+</node>
+</node>
+</node>
+<node TEXT="7 HuggingFace 与中文 NLP（6.HuggingFace实战指南、7.中文NLP实战）→ 代码 meishiyi/09_HuggingFace/00、01、nlp-practice/">
+<node TEXT="Pipeline 三行代码 = 预处理 → 推理 → 后处理；手动扒光一遍">
+</node>
+<node TEXT="Tokenizer：分词 → 映射 ID → 填充截断 → 三件套 input_ids / token_type_ids / attention_mask">
+</node>
+<node TEXT="Model = 底座 + 任务头：AutoModelForSequenceClassification / TokenClassification / CausalLM；num_labels 坑">
+</node>
+<node TEXT="Datasets：load_dataset、map/filter/select、DataCollatorWithPadding 动态填充；Evaluate 指标">
+</node>
+<node TEXT="标准十步流程：数据 → 分词 → 模型 → TrainingArguments → Trainer → 评估 → 推理上线">
+</node>
+<node TEXT="情感分类（MacBERT 微调）、NER（IOB 标注、子词与标签对齐 word_ids、实体级 F1）">
+</node>
+</node>
+</node>
+<node TEXT="模块六 AI 大模型深度调优实战（LLaMA 架构 + 训练流水线 + 微调 + 量化 + 分布式 + 部署）">
+<node TEXT="1 LoRA 微调（1.大模型LoRA微调）★ → 代码 deepLearning/lora/s1-s3、meishiyi/09_HuggingFace/lora/s4a-s4d、code/lora/">
+<node TEXT="第一章 微调这件事 → s1_memory.py">
+<node TEXT='三条路线分工：提示词改"怎么说"、RAG 补"知道什么"、微调改"行为/格式/风格"'>
+</node>
+<node TEXT="全量微调三座大山：显存、算力、灾难性遗忘">
+</node>
+<node TEXT="显存四笔账：权重 + 梯度 + 优化器状态(Adam 8 字节/参数) + 激活；混合精度+AdamW ≈ 16 字节/参数，7B ≈ 112 GB">
+</node>
+<node TEXT="冻结参数只剩权重一笔：梯度不分配(W.grad=None)、优化器状态归零">
+</node>
+</node>
+<node TEXT="第二章 秩 → s2_rank.py">
+<node TEXT='秩 = 矩阵里不重复的"干货"行数；三个视角（线性相关/列空间/信息量）'>
+</node>
+<node TEXT="低秩分解：d×d 矩阵 ≈ (d×r)·(r×d)，参数从 d² 降到 2dr">
+</node>
+</node>
+<node TEXT="第三章 LoRA 原理 → s3_lora_by_hand.py">
+<node TEXT="公式：W' = W + (α/r)·B·A；h = Wx + (α/r)·BAx；W 冻结，B(d×r) A(r×d) 可训，r 取 4~64">
+</node>
+<node TEXT="参数账：4096×4096 层 r=8 → 65,536 / 16,777,216 ≈ 0.39%；全模型可训 0.1%~1%">
+</node>
+<node TEXT="显存：权重省不掉，梯度和优化器状态 ≈ 减 99%，激活基本不变；7B 全量 ~160 GB / LoRA ~20 GB">
+</node>
+<node TEXT="初始化：A 随机、B 置零 → 起点 BA=0 模型不变；都零梯度互锁，都随机起点被打一拳">
+</node>
+<node TEXT="两种用法：Merge W_new = W + (α/r)BA 零延迟上线；Adapter 分离一个基座挂 N 个热切换">
+</node>
+<node TEXT="挂哪些层：Wq+Wv 性价比最高；r=4/8 够用；多挂矩阵 &gt; 单矩阵加大 r；嵌入层/LayerNorm/bias 不挂">
+</node>
+<node TEXT="target_modules：经济 q_proj,v_proj / 标准 +k_proj,o_proj / 豪华 +gate_proj,up_proj,down_proj">
+</node>
+<node TEXT="边界：低秩假设失效（任务差异极大）要全量；灌知识找 RAG；数据不行神仙难救">
+</node>
+</node>
+<node TEXT="第四章 工程实战 → s4a_chat_template.py、s4b_preprocess.py、s4c_peft_trainer.py、s4d_merge_infer.py">
+<node TEXT="工具链：transformers + peft + datasets + accelerate；LLaMA-Factory 零代码">
+</node>
+<node TEXT="数据：chat template 训练/推理必须一致；labels 里 prompt 部分填 -100 只对回答算 loss">
+</node>
+<node TEXT="代码流程 15 步：加载模型/tokenizer → preprocess_function（apply_chat_template → encode → 截断保 EOS → labels -100）→ load_dataset+map → LoraConfig(r=8, lora_alpha=16, target_modules, lora_dropout=0.05, task_type=CAUSAL_LM) → get_peft_model → 统计可训参数 → enable_input_require_grads → TrainingArguments(gradient_checkpointing, gradient_accumulation_steps, report_to=tensorboard) → DataCollator → Trainer.train → PeftModel.from_pretrained + merge_and_unload → 推理验证">
+</node>
+<node TEXT="课件 4.3 训练脚本的坑（勘误清单见 模块六-LoRA微调.md）；可跑版 code/lora/lora_train_fixed.py">
+</node>
+<node TEXT="超参心法：r 8~16、α=2r、lr 1e-4~2e-4、epoch 3；评测别只盯 loss">
+</node>
+</node>
+</node>
+<node TEXT="2 低精度训练与量化（2.低精度训练与量化实战指南）★ → 代码 deepLearning/quant/s1-s6、code/lora/quant_demo.py">
+<node TEXT="第 1 章 显存账本">
+<node TEXT="训练显存 = (权重 + 梯度 + 优化器 + 激活) × 安全系数 1.2~1.5；推理 ≈ 权重 + KV Cache">
+</node>
+<node TEXT="全参微调 Qwen2.5-7B：BF16 权重 14 + BF16 梯度 14 + FP32 主权重 28 + AdamW 56 + 激活 16 = 128 → ×1.25 ≈ 160 GB">
+</node>
+<node TEXT="训练时长：FLOPs ≈ 6 × 参数量 × token 数（开梯度检查点用 8）；时长 = FLOPs ÷ (卡数 × 单卡算力 × MFU 0.4~0.5)">
+</node>
+<node TEXT="装不下三条路：省（低精度/量化）、换（梯度检查点）、摊（ZeRO/并行）">
+</node>
+</node>
+<node TEXT="第 2 章 低精度数据类型 → s1_dtypes.py">
+<node TEXT="浮点三段式：(−1)^S × 2^(E−偏移) × (1+M)；指数管范围、尾数管精度">
+</node>
+<node TEXT="FP32 1+8+23 ±3.4e38；FP16 1+5+10 ±65504；BF16 1+8+7 范围同 FP32；FP8 E4M3 ±448 / E5M2 ±57344">
+</node>
+<node TEXT="FP16 上溢 inf、下溢 &lt;6e-5 归零；BF16 范围优先，训练标配，不用梯度缩放">
+</node>
+<node TEXT="混合精度 = BF16 算、FP32 存主权重和优化器状态">
+</node>
+<node TEXT='加载：from_pretrained(path, torch_dtype=torch.bfloat16, device_map="auto")；7B 28 GB → 14 GB'>
+</node>
+</node>
+<node TEXT="第 3 章 INT8 量化 → s2_int8.py、s5_int8_row.py">
+<node TEXT="量化 = 浮点塞进 256 个整数刻度；absmax 三步：锚点 absmax → scale=127/absmax → round；存 q + scale">
+</node>
+<node TEXT="手算 [0.83,−1.27,2.56,−3.18] → scale 39.94 → [33,−51,102,−127]，误差 ≤ 0.007">
+</node>
+<node TEXT="离群值撑坏刻度：[35,38,42,280] 正常值挤到几个刻度">
+</node>
+<node TEXT="LLM.int8()：离群列拆出走 FP16，其余 INT8，结果相加；13B 内精度持平、显存减半">
+</node>
+<node TEXT="代码：BitsAndBytesConfig(load_in_8bit=True)；只量化 nn.Linear → Linear8bitLt；Embedding/lm_head/Norm 不量化">
+</node>
+<node TEXT="INT8 只用于推理不用于训练（小梯度被等距刻度归零）">
+</node>
+</node>
+<node TEXT="第 4 章 4bit 与 QLoRA → s3_nf4.py、s6_quant_flow.py">
+<node TEXT="INT4 只有 16 刻度，等距切分误差 18% 级；权重中间胖两头瘦 → 分位数量化">
+</node>
+<node TEXT="NF4：标准正态分位数当 16 个固定刻度值（含精确 0）；每 64 个权重一块，块内 ÷absmax 后就近对尺">
+</node>
+<node TEXT="手算 [0.42,0.75,−0.95,2.71]：归一化 → 最近邻索引 [9,10,3,15] → 查表 × absmax 还原">
+</node>
+<node TEXT="双重量化：absmax 每 256 个一组再压 8bit，每参数 0.5 bit → 0.127 bit，7B 省 0.3 GB">
+</node>
+<node TEXT='分页优化器：optim="paged_adamw_32bit"，优化器状态显存爆时换到 CPU'>
+</node>
+<node TEXT="QLoRA = 4bit NF4 冻结基座 + LoRA(A/B 正常精度) + 双重量化 + 分页优化器；7B 从 20 GB → 10~12 GB">
+</node>
+<node TEXT="代码四步：BitsAndBytesConfig(load_in_4bit, nf4, compute_dtype=bf16, double_quant) → from_pretrained(quantization_config) → prepare_model_for_kbit_training（冻结、未量化层升 FP32、开梯度检查点）→ LoraConfig(r=16, alpha=32, 七个 proj) + get_peft_model">
+</node>
+<node TEXT="原则：谁被更新谁细存(FP32)，不被更新的粗存(BF16/4bit)；计算永远 BF16；W 4bit 常驻、用时临时解压">
+</node>
+<node TEXT="4090 实测：bf16 14.19 GB / int8 8.11 GB / nf4 5.07 GB；Qwen 词表 15 万使 Embedding+lm_head 多占 2 GB">
+</node>
+</node>
+</node>
+<node TEXT="3 分布式训练（3.大模型分布式训练实战指南）→ 代码 deepLearning/dist/s1_three_ways.py、meishiyi/09_HuggingFace/dist/">
+<node TEXT="单卡撑不住：显存、算力两座山；自救 = 梯度累积、梯度检查点、混合精度，有天花板">
+</node>
+<node TEXT="三种并行：DP 复制模型切数据；PP 按层切模型（Bubble 空转）；TP 切开每一层（显存换通信，限单机 NVLink）；3D 并行组合">
+</node>
+<node TEXT="DP 实战：DataParallel 单进程多线程三个坑 → DistributedDataParallel；HF Trainer 自动多卡">
+</node>
+<node TEXT="ZeRO：把梯度/优化器/参数的冗余副本切掉；Stage1 切优化器、Stage2 +梯度、Stage3 +参数；Offload 到 CPU">
+</node>
+<node TEXT="DeepSpeed 配置 ds_zero2.json / ds_zero3.json / ds_zero3_offload.json → TrainingArguments(deepspeed=...)">
+</node>
+<node TEXT="LLaMA-Factory：零代码微调框架，template 参数选对话模板">
+</node>
+</node>
+<node TEXT="4 微调数据集（4.大模型微调数据集完全指南）→ 代码 code/lora/01-09">
+<node TEXT="数据 &gt; 参数：规模、质量、多样性；训练/验证/测试集隔离">
+</node>
+<node TEXT="五类 SFT 任务：指令、对话、领域适配、分类、CoT 推理">
+</node>
+<node TEXT="存储格式 Alpaca（单轮 instruction/input/output）vs ShareGPT（多轮 conversations，工具调用）">
+</node>
+<node TEXT="两层格式：存储格式（JSON，跟模型无关）→ 对话模板 chat template（每个模型家族一套）">
+</node>
+<node TEXT="构建流程：获取 → 清洗三步法 → 标注 → 验证迭代；Easy Dataset 文档进 QA 出">
+</node>
+<node TEXT="评估：客观题精确匹配 / BLEU-ROUGE 字面重叠 / 开放题 LLM-as-Judge / 人工盲测；闭环补数据再训">
+</node>
+</node>
+<node TEXT="5 推理部署：vLLM / KV Cache / PagedAttention（5.大模型推理部署）★ → 代码 meishiyi/09_HuggingFace/inference_deploy/s1-s18">
+<node TEXT="vLLM 起步：vllm serve 模型路径 --served-model-name --api-key；OpenAI 兼容，ChatOpenAI 改 base_url 即可">
+</node>
+<node TEXT="两阶段 → s1_sampling.py、s2_roofline.py">
+<node TEXT="Prefill 一次并行读完输入，卡算力，管 TTFT；Decode 每步生成 1 token，卡显存带宽，管 TPOT">
+</node>
+<node TEXT="指标：TTFT、TPOT/ITL、E2E = TTFT + 输出长度 × TPOT、吞吐；优化顺序 TTFT → TPOT → 吞吐">
+</node>
+<node TEXT="采样：temperature = logits ÷ T 再 softmax；top_k / top_p 砍长尾；do_sample=False 贪心">
+</node>
+<node TEXT="Roofline：算术强度 I = 计算量 ÷ 搬运量；Decode 单请求 n=1 时 I≈1，远低于 A100 平衡点 156">
+</node>
+<node TEXT="推高 I 两手段：分子变大靠凑批（提吞吐）；分母变小靠量化/缩小缓存（单请求也快）">
+</node>
+</node>
+<node TEXT="KV Cache → s3_kvcache_speed.py、s4_kvcache_size.py、s5_kvcache_example.py、s6_prefix_cache.py">
+<node TEXT="为什么：Decode 每步只送 1 个新 token，历史 K、V 算好存着，省掉历史 token 每步重过整个模型；实测 200 token 快 4.9 倍">
+</node>
+<node TEXT="只存 K、V 不存 Q：Q 当前 token 用一次就扔；K、V 全部历史每步都要用">
+</node>
+<node TEXT="形状 [请求数, KV头数, token数, 头维度]，每层一份 K 一份 V">
+</node>
+<node TEXT="显存公式：2 × 层数 × KV头数 × 头维度 × 序列长 × 字节数；Qwen2.5-7B 每 token 57 KB，LLaMA-2-7B 524 KB">
+</node>
+<node TEXT="部署算账：缓存池 = 可用显存 − 权重 − 预留 → 决定并发数；4090 跑 7B 池子 5 GB ≈ 86K token">
+</node>
+<node TEXT="前缀缓存 --enable-prefix-caching：开头逐 token 相同就复用，不变的放前面">
+</node>
+</node>
+<node TEXT="PagedAttention → s7_prealloc_waste.py、s8_block_table.py、s9_cow.py">
+<node TEXT="朴素预分配两坑：过度预留 + 碎片，利用率 20~40%">
+</node>
+<node TEXT="分页：显存切固定块（16 token/块），Block Table 记逻辑块 → 物理块；写满一块领一块，浪费只剩最后一块">
+</node>
+<node TEXT="前缀共享 + COW：多张表指向同一批块，引用计数；计数&gt;1 的块写前先复制">
+</node>
+<node TEXT="代价：注意力读缓存多查一次表，vLLM 自写 kernel">
+</node>
+</node>
+<node TEXT="Continuous Batching → s10-s13、s14_mini_engine.py、s15_tokens_detok.py">
+<node TEXT="静态批处理（HF generate）：整批同进同出，短请求陪跑白算 63%">
+</node>
+<node TEXT="连续批处理：等待队列 + 运行集，每步 组批 → 执行 → 结算，写完立刻走">
+</node>
+<node TEXT="调度两参数：max_num_seqs 管条数；max_num_batched_tokens 管每步 token 预算（先 Decode 后 Prefill，超出切块 Chunked Prefill）">
+</node>
+<node TEXT="调法三步：硬约束 ≥ max_num_seqs → 场景起步值（聊天 2048 / 长文 &gt;8192）→ 压测 P99 对 SLO">
+</node>
+<node TEXT="九驿站：API Server → 模板+分词 → 调度组批 → GPU 执行 → Prefill 出缓存 → Decode 循环 → 采样 → 增量转文字 → SSE 推送">
+</node>
+</node>
+<node TEXT="PD 分离 → s16_kv_transfer.py、s17_think_ttft.py、s18_kv_offload.py">
+<node TEXT="Prefill 吃算力 Decode 怕卡顿，拆成两个池子各自扩容；代价 KV Cache 跨机搬家（RDMA/NVLink、逐层流水）">
+</node>
+<node TEXT="推理模型首 token 是 &lt;think&gt; 不可见，TTFT 失真；思考 token 全在 Decode 池">
+</node>
+<node TEXT="KV Offloading：显存不够放内存/磁盘">
+</node>
+</node>
+</node>
+<node TEXT="6 大模型架构与训练全流程（6.大模型架构与训练全流程）★ → 代码 meishiyi/09_HuggingFace/arch_train/s1-s6、s16">
+<node TEXT="架构之争">
+<node TEXT="Encoder 双向（BERT 完形填空，只懂不会写）/ Encoder-Decoder（T5）/ Decoder-Only（GPT 下一词预测）">
+</node>
+<node TEXT="Decoder-Only 赢：万物皆序列不用换头；因果掩码 → 旧 token K/V 永远不变 → KV Cache 复用；结构单一好扩展；RoPE 外推">
+</node>
+<node TEXT="BERT 512 上限根因：可学习绝对位置表只有 512 行">
+</node>
+<node TEXT="Transformer vs LLaMA 五处替换：LayerNorm→RMSNorm、Post-Norm→Pre-Norm、底部加位置→每层 RoPE、MHA→GQA、ReLU FFN→SwiGLU → s16_llama_walk.py">
+</node>
+<node TEXT="一层顺序：RMSNorm → 注意力(Q/K 加 RoPE, GQA) → ⊕残差 → RMSNorm → SwiGLU → ⊕残差；N 层后 RMSNorm → Linear → Softmax">
+</node>
+</node>
+<node TEXT="训练四站">
+<node TEXT="第 0 步 分词：文字 → token → ID → 向量 → s1_tokenize.py">
+</node>
+<node TEXT="预训练：文字接龙 loss = −log p(下一个 token)；产物 base 只会续写 → s2_pretrain.py">
+</node>
+<node TEXT="后训练 SFT：loss 与预训练一样，只换数据 + 对话模板 + 掩码(-100)；SFT 管数据和 loss，全量/LoRA 管更新哪些参数 → s3_sft_format.py、s3b_template_compare.py">
+</node>
+<node TEXT="偏好学习：RLHF 4 个模型 → DPO 2 个(actor+ref) → GRPO 组内平均当基线 → CISPO 裁剪后 detach 保梯度 → s4_preference.py、s5_cispo_grad.py">
+</node>
+<node TEXT="推理能力：可核对题目 + 结果奖励 + GRPO；思考模式 &lt;think&gt; 开关 → s6_think.py">
+</node>
+<node TEXT='微调：改"怎么说"不灌知识；能 Prompt/RAG 解决就别训；黑盒蒸馏 = 老师造数据 + SFT'>
+</node>
+<node TEXT="推理：逐 token 采样；Agent 场景一个请求 = 很多次推理">
+</node>
+<node TEXT="MiniMind：64M 参数纯 PyTorch 跑完全部阶段，结构 = LLaMA/Qwen3">
+</node>
+</node>
+</node>
+<node TEXT="7 模块详解：RMSNorm / GQA / RoPE / MoE（7.大模型模块详解）★ → 代码 arch_train/s7-s15、minimind_model.py">
+<node TEXT="RMSNorm → s7_rmsnorm.py、s9_layer_parts.py、s10_why_prenorm.py、s11_post_vs_pre.py">
+<node TEXT="RMS = 平方 → 平均 → 开根；RMSNorm(x) = x / RMS(x) × γ；比 LayerNorm 少减均值和 β">
+</node>
+<node TEXT="手算 [2,4,4,6]：LayerNorm [−1.41,0,0,1.41]；RMSNorm [0.47,0.94,0.94,1.41]">
+</node>
+<node TEXT="代码 x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)；先转 float32 再算">
+</node>
+<node TEXT="为什么能 work：真正防炸的是缩放；效果持平、提速 7%~64%">
+</node>
+<node TEXT="位置：每层 2 个 Pre-Norm（input_layernorm、post_attention_layernorm）+ 最后 1 个；Qwen3 另加 q_norm/k_norm">
+</node>
+<node TEXT="Pre-Norm 主干道只做加法梯度直通，深了也稳；Post-Norm 每层压一次原稿，深了难训要 warmup">
+</node>
+<node TEXT="主干道 RMS 实测 0.03 → 105，进门前归一化防 softmax 饱和">
+</node>
+</node>
+<node TEXT="MHA → MQA → GQA → s12_gqa_cache.py">
+<node TEXT="只省 K、V 不省 Q：KV Cache 只存 K、V；Q 决定每个头找什么，是多样性来源">
+</node>
+<node TEXT="MHA 每个 Q 头配一份 K/V；MQA 全部共用一份；GQA 几个 Q 头一组共用一份（主流）">
+</node>
+<node TEXT="KV Cache = 层数 × KV头数 × head_dim × 2 × 字节 × token 数；Qwen3-0.6B 4096 token：MHA 896 MB / GQA 448 MB / MQA 56 MB">
+</node>
+<node TEXT="实现：缓存存 8 个 KV 头，算时 repeat_kv 临时复制成 16 份">
+</node>
+<node TEXT="国内：Qwen2/3 全系 GQA；DeepSeek 用 MLA 低秩压缩更极致">
+</node>
+</node>
+<node TEXT="RoPE → s8_rope_intuition.py、s13_rope_freq.py">
+<node TEXT="位置：每层注意力里，q_norm/k_norm 之后、打分之前，只转 Q 和 K 不转 V">
+</node>
+<node TEXT="核心：位置 m 的 Q 转 mθ，位置 n 的 K 转 nθ，点积只剩 (n−m)θ → 打分 = 内容 + 相对距离，与绝对位置无关">
+</node>
+<node TEXT="多转速：head_dim 128 拆 64 对，θ_i = rope_theta^(−2i/128)；快对看近处、慢对看远距离；Qwen3 rope_theta=1,000,000">
+</node>
+<node TEXT="实现：apply_rotary_pos_emb，HF 用 rotate_half 前一半配后一半">
+</node>
+<node TEXT="外推：纯 RoPE 超训练长度也变差，靠 NTK/YaRN 改转速（Qwen3 32K → 128K）">
+</node>
+<node TEXT="对比正余弦：相加融合、绝对位置、只加一次 vs 旋转、相对位置、每层做">
+</node>
+</node>
+<node TEXT="MoE → s14_moe_router.py、s15_moe_balance.py">
+<node TEXT="只换 FFN：N 个小 FFN(专家) + 路由；注意力/RMSNorm/RoPE/残差不变">
+</node>
+<node TEXT="路由三步：x·W_router → softmax → top-k；输出 = Σ 概率 × 专家输出；每个 token 每层各选各的">
+</node>
+<node TEXT="省计算不省显存：Qwen3-30B-A3B 128 专家选 8，总 30.5B 每 token 算 3.3B，显存装全部">
+</node>
+<node TEXT="负载均衡：辅助损失 Switch 版 = 专家数 × Σ(token 比例 × 平均概率)，系数 0.001；专家容量溢出走残差；DeepSeek-V3 无辅助损失偏置调节">
+</node>
+<node TEXT="同计算量 MoE 更强，同总参数稠密更强；训练要融合算子才兑现">
+</node>
+</node>
+<node TEXT="SwiGLU：down(SiLU(gate(x)) × up(x))，三个矩阵；SiLU(x)=x·sigmoid(x)；中间维 8/3·d；参数大头在 FFN → MoE 只拆 FFN 的原因">
+</node>
+</node>
+</node>
+<node TEXT="融合主线：一个 token 的一生（三条线把模块五和六串起来）">
+<node TEXT="前向线：token 怎么变成下一个 token">
+<node TEXT="① 分词 token → ID（模块五词向量 4 章；模块六 s1_tokenize）">
+</node>
+<node TEXT="② Embedding 查表（模块五 nn.Embedding；原版 × √d_model，LLaMA 不乘）">
+</node>
+<node TEXT="③ 位置：原版底部加正余弦 → LLaMA 每层对 Q/K 做 RoPE">
+</node>
+<node TEXT="④ 归一化：原版相加后 LayerNorm(Post) → LLaMA 进门前 RMSNorm(Pre)">
+</node>
+<node TEXT="⑤ 注意力：softmax(QKᵀ/√d_k)V 不变；MHA → GQA；因果掩码 → 旧 K/V 不变 → KV Cache">
+</node>
+<node TEXT="⑥ 残差 ⊕（模块五 CNN 残差 F(x)+x 同一个东西）">
+</node>
+<node TEXT="⑦ FFN：ReLU 512→2048→512 → SwiGLU 三矩阵 → MoE 多个专家 + 路由">
+</node>
+<node TEXT="⑧ 输出：Linear → logits → 训练进交叉熵 / 推理按温度采样">
+</node>
+</node>
+<node TEXT="训练线：哪些参数被改、用什么精度存">
+<node TEXT="① 模块五训练五句代码 = 所有训练的骨架：前向 → loss → zero_grad → backward → step">
+</node>
+<node TEXT="② 预训练 / SFT 的 loss 都是交叉熵(下一词)，SFT 加对话模板和 -100 掩码">
+</node>
+<node TEXT="③ 全量微调显存账：权重 + 梯度 + AdamW 8 字节 + 激活 ≈ 16~20 倍参数字节">
+</node>
+<node TEXT="④ LoRA：冻结 W 只训 B·A，梯度和优化器状态砍 99%；W' = W + (α/r)BA">
+</node>
+<node TEXT="⑤ 精度：谁被更新谁 FP32 存；不更新的 BF16 → INT8 → NF4；计算永远 BF16">
+</node>
+<node TEXT="⑥ QLoRA = 4bit 基座 + LoRA；量化只在 from_pretrained 那一行，LoRA 只在 get_peft_model 那一行">
+</node>
+<node TEXT="⑦ 还不够：梯度检查点换时间、ZeRO 把梯度/优化器/参数摊到多卡">
+</node>
+<node TEXT="⑧ 训完：merge_and_unload 回 BF16 基座 → 普通模型">
+</node>
+</node>
+<node TEXT="推理线：一个请求在服务里怎么跑">
+<node TEXT="① Prefill 并行读输入（卡算力）→ Decode 逐 token（卡带宽，Roofline I≈1）">
+</node>
+<node TEXT="② 每步只算新 token 的 Q/K/V；历史 K/V 存在 KV Cache（GQA 决定它多大）">
+</node>
+<node TEXT="③ KV Cache 按 16 token 一块分页，Block Table 映射，前缀共享 + COW">
+</node>
+<node TEXT="④ 连续批处理每步重新组批；两个调度参数定吞吐/延迟">
+</node>
+<node TEXT="⑤ 推理精度：BF16 → INT8(LLM.int8) → INT4(GPTQ/AWQ 离线)；量化缩小分母推高 I">
+</node>
+<node TEXT="⑥ 采样：温度 / top_k / top_p → 下一个 token → 回到 ②">
+</node>
+<node TEXT="⑦ 大规模：PD 分离、TP/DP、KV 搬家">
+</node>
+</node>
+</node>
+</node>
+</map>

@@ -1,0 +1,84 @@
+services:
+  vllm:
+    image: vllm/vllm-openai@sha256:d8d39b59e909d2378ac4feeb191f7e7b6f1342477dc66b7c47cec89e9985ad8a
+    platform: linux/amd64
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: 8gb
+    # 每台主机使用一张 L40S，另一台主机独立运行相同配置。
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    ports:
+      # 8000 仅绑定私网地址；安全组仅允许网关、监控与受控运维主机访问。
+      - "${INFERENCE_BIND_IP:?请填写GPU主机私网IP}:8000:8000"
+    volumes:
+      - type: bind
+        source: ${MODEL_DIRECTORY:?请填写固定模型文件的绝对目录}
+        target: /models/qwen3-8b
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./start-vllm.sh
+        target: /opt/inference/start-vllm.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - inference_api_key
+    entrypoint: ["/bin/sh", "-eu", "/opt/inference/start-vllm.sh"]
+    command:
+      - --model
+      - /models/qwen3-8b
+      - --served-model-name
+      - zhifu-qwen3-8b-r1
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --dtype
+      - bfloat16
+      - --kv-cache-dtype
+      - auto
+      - --tensor-parallel-size
+      - "1"
+      - --gpu-memory-utilization
+      - "0.85"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "8"
+      - --max-num-batched-tokens
+      - "4096"
+      - --tool-call-parser
+      - hermes
+      - --enable-auto-tool-choice
+      - --enable-prefix-caching
+      - --enable-chunked-prefill
+      - --generation-config
+      - vllm
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status == 200"
+      start_period: 180s
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  inference_api_key:
+    # 原始密钥只通过只读文件注入，Compose 参数不包含密钥内容。
+    file: ${INFERENCE_SECRET_FILE:?请填写生成服务密钥文件的绝对路径}
